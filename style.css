@@ -1,0 +1,1089 @@
+:root {
+    --colors-primary-main: #1368ce;
+    --colors-background-default: #f2f2f2;
+    --colors-background-paper: #fff;
+    --colors-error-main: #e21b3c;
+    --colors-warning-main: #d89e00;
+    --colors-success-main: #26890c;
+    --colors-purple-300: #864cbf;
+    --colors-purple-500: #46178f;
+    --colors-text-primary: #333;
+    --colors-text-secondary: #6e6e6e;
+    --borderRadius-md: 8px;
+    --borderRadius-lg: 12px;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: Montserrat, "Noto Sans Arabic", "Helvetica Neue", Helvetica, Arial, "Bai Jamjuree", sans-serif;
+}
+
+body {
+    background-color: #46178f; /* Kahoot Deep Purple / G2KU Vibe */
+    color: var(--colors-text-primary);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Shared Kahoot-style navigation */
+.app-menu {
+    background-color: #f9e076;
+    width: 100%;
+    padding: 0.85rem 1.25rem;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1300px);
+    justify-content: center;
+    align-items: center;
+    border-bottom: 4px solid var(--colors-purple-300);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.app-brand {
+    color: var(--colors-purple-500);
+    font-size: 1.5rem;
+    font-weight: 900;
+    letter-spacing: -0.5px;
+    text-decoration: none;
+}
+
+.app-brand:focus-visible {
+    outline: 3px solid var(--colors-purple-500);
+    outline-offset: 4px;
+    border-radius: 2px;
+}
+
+.menu-links {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.75rem;
+    width: 100%;
+    max-width: 1300px;
+    min-width: 0;
+}
+
+.nav-pill {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.75rem 1rem;
+    border-radius: var(--borderRadius-md);
+    font-weight: 800;
+    font-size: 1rem;
+    letter-spacing: -0.2px;
+    text-decoration: none;
+    color: var(--colors-background-paper);
+    border: none;
+    box-shadow: 0 5px 0 rgba(0, 0, 0, 0.25);
+    transition: transform 0.08s ease, filter 0.15s ease, box-shadow 0.08s ease;
+    user-select: none;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.nav-pill:hover {
+    filter: brightness(1.08);
+    transform: translateY(-2px);
+    box-shadow: 0 7px 0 rgba(0, 0, 0, 0.25);
+}
+
+.nav-pill:active,
+.nav-pill.active {
+    transform: translateY(4px);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+}
+
+.shape-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background-color: rgba(255, 255, 255, 0.25);
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.shape-badge svg {
+    width: 16px;
+    height: 16px;
+    fill: #fff;
+}
+
+.red-btn { background-color: var(--colors-error-main); }
+.blue-btn { background-color: var(--colors-primary-main); }
+.yellow-btn {
+    background-color: var(--colors-warning-main);
+    color: #fff;
+}
+.yellow-btn .shape-badge { background-color: rgba(0, 0, 0, 0.15); }
+.green-btn { background-color: var(--colors-success-main); }
+.join-btn,
+.purple-btn {
+    background-color: var(--colors-purple-500);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+@media (max-width: 992px) {
+    .app-menu { grid-template-columns: auto minmax(0, 1fr); }
+    .menu-links { grid-template-columns: repeat(3, 1fr); }
+    .nav-pill {
+        font-size: 0.9rem;
+        padding: 0.65rem 0.75rem;
+    }
+}
+
+@media (max-width: 600px) {
+    .app-menu {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 0.6rem;
+        gap: 0.5rem;
+    }
+    .app-brand { justify-self: start; }
+    .menu-links {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.5rem;
+    }
+    .nav-pill {
+        font-size: 0.85rem;
+        padding: 0.6rem 0.5rem;
+        justify-content: flex-start;
+    }
+    .shape-badge {
+        width: 24px;
+        height: 24px;
+    }
+    .shape-badge svg {
+        width: 13px;
+        height: 13px;
+    }
+}
+
+.site-footer {
+    width: 100%;
+    margin-top: auto;
+    padding: 1rem 1.5rem;
+    background-color: #f9e076;
+    border-top: 3px solid #864cbf;
+    color: #46178f;
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+/* Top Question Banner */
+.question-container {
+    background-color: var(--colors-background-paper);
+    width: 100%;
+    padding: 30px 20px;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    z-index: 10;
+}
+
+.question-text {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--colors-text-primary);
+}
+
+/* Middle Media / Timer Section */
+.media-container {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    padding: 20px;
+}
+
+.timer {
+    width: 80px;
+    height: 80px;
+    background-color: var(--colors-purple-300);
+    color: var(--colors-background-paper);
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.8rem;
+    font-weight: bold;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+}
+
+/* Bottom Answer Grid */
+.answers-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 15px;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+/* Base Answer Button Style */
+.answer-btn {
+    border: none;
+    border-radius: var(--borderRadius-sm);
+    color: var(--colors-background-paper);
+    font-size: 1.5rem;
+    font-weight: 700;
+    padding: 25px 30px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    transition: transform 0.1s ease, filter 0.2s ease;
+    box-shadow: 0 4px 0px rgba(0,0,0,0.2);
+    min-height: 100px;
+}
+
+.answer-btn:hover {
+    filter: brightness(1.05);
+}
+
+.answer-btn:active {
+    transform: translateY(4px);
+    box-shadow: 0 0px 0px rgba(0,0,0,0.2);
+}
+
+/* Kahoot Shapes Layout */
+.shape {
+    font-size: 2rem;
+    margin-right: 20px;
+    display: inline-block;
+    width: 40px;
+    text-align: center;
+}
+
+/* Authentic Kahoot Color Tokens */
+.red-btn { background-color: var(--colors-error-main); }
+.blue-btn { background-color: var(--colors-primary-main); }
+.yellow-btn { background-color: var(--colors-warning-main); }
+.green-btn { background-color: var(--colors-success-main); }
+
+/* Sticky Bottom Ad / Sponsor Matrix Placement */
+.sponsor-outer-matrix {
+    width: 100%;
+    background-color: #46178f; /* Matches your body/menu deep purple */
+    border-top: 3px solid #864cbf; 
+    padding: 1rem 1.5rem;
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    position: sticky;
+    bottom: 0;
+    z-index: 999;
+}
+
+.individual-sponsor-slot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: var(--borderRadius-md);
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-decoration: none;
+    color: var(--colors-background-paper);
+    background-color: var(--colors-purple-300); /* Gives it that button color */
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 0 rgba(0, 0, 0, 0.2);
+    transition: transform 0.1s ease, filter 0.1s ease;
+    cursor: pointer;
+}
+
+.individual-sponsor-slot:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+
+.individual-sponsor-slot:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* Responsive design for smaller screens */
+@media (max-width: 768px) {
+    .answers-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    .question-text {
+        font-size: 1.5rem;
+    }
+    .answer-btn {
+        font-size: 1.2rem;
+        padding: 15px 20px;
+        min-height: 70px;
+    }
+    .sponsor-outer-matrix {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+.onboarding-card {
+    max-width: 520px;
+    margin: 2rem auto;
+    padding: 2.5rem 2rem;
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+    text-align: left;
+}
+
+.brand-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    background: #f3e8ff;
+    color: #6b21a8;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border-radius: 999px;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.hero-title {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: #111827;
+    margin-bottom: 1rem;
+    line-height: 1.2;
+}
+
+.hero-subtitle, .body-text {
+    font-size: 0.95rem;
+    color: #4b5563;
+    line-height: 1.5;
+    margin-bottom: 1.25rem;
+}
+
+.feature-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.feature-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: #f9fafb;
+    border-radius: 12px;
+}
+
+.feature-icon {
+    font-size: 1.25rem;
+}
+
+.feature-item strong {
+    display: block;
+    font-size: 0.9rem;
+    color: #111827;
+}
+
+.feature-item p {
+    font-size: 0.825rem;
+    color: #6b7280;
+    margin: 0;
+}
+
+/* Mini Game Teaser Card */
+.game-teaser-card {
+    background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+    border: 1px solid #ddd6fe;
+    border-radius: 16px;
+    padding: 1.25rem;
+    margin: 1.75rem 0;
+}
+
+.teaser-tag {
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: #7c3aed;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+}
+
+.game-teaser-card h3 {
+    font-size: 1.1rem;
+    color: #4c1d95;
+    margin-bottom: 0.5rem;
+}
+
+.game-teaser-card p {
+    font-size: 0.85rem;
+    color: #5b21b6;
+    line-height: 1.4;
+    margin-bottom: 0.75rem;
+}
+
+.game-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.mini-badge {
+    background: #ffffff;
+    color: #6d28d9;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+}
+
+.onboarding-footer {
+    text-align: center;
+    margin-top: 1.5rem;
+}
+
+.tagline {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #111827;
+    margin-bottom: 1rem;
+}
+
+.action-row {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.action-button.secondary {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.action-button.secondary:hover {
+    background: #e5e7eb;
+}
+
+/* Sign-in and sign-up pages */
+#authView {
+    display: flex;
+    flex: 1;
+    justify-content: center;
+    align-items: flex-start;
+    width: 100%;
+    padding: 2rem 1rem;
+}
+
+.auth-card {
+    width: 100%;
+    max-width: 520px;
+    padding: 2rem;
+    background: var(--colors-background-paper);
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+.auth-card h2,
+.auth-card h3 {
+    margin-bottom: 0.75rem;
+    color: var(--colors-purple-500);
+    text-align: center;
+}
+
+.auth-card > p,
+.auth-card form p,
+.auth-card #verificationSection > p {
+    margin-bottom: 1rem;
+    color: var(--colors-text-secondary);
+    line-height: 1.5;
+}
+
+.auth-card .form-group {
+    margin-bottom: 1rem;
+}
+
+.auth-card .form-group label {
+    display: block;
+    margin-bottom: 0.4rem;
+    color: var(--colors-text-primary);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.auth-card .input-field,
+.auth-card .input-select {
+    width: 100%;
+    min-height: 44px;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #c9c4d2;
+    border-radius: var(--borderRadius-md);
+    background: #fff;
+    color: var(--colors-text-primary);
+    font: inherit;
+}
+
+.auth-card .input-field:focus,
+.auth-card .input-select:focus {
+    border-color: var(--colors-purple-300);
+    outline: 3px solid rgba(134, 76, 191, 0.2);
+}
+
+.auth-card .action-button {
+    width: 100%;
+    min-height: 46px;
+    padding: 0.7rem 1rem;
+    border: 0;
+    border-radius: var(--borderRadius-md);
+    background: var(--colors-purple-500);
+    color: #fff;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+    transition: filter 0.15s ease, transform 0.1s ease;
+}
+
+.auth-card .action-button:hover {
+    filter: brightness(1.12);
+}
+
+.auth-card .action-button:active {
+    transform: translateY(2px);
+}
+
+.auth-card .account-links {
+    margin: 1rem 0;
+    color: var(--colors-text-secondary);
+    text-align: center;
+}
+
+.auth-card .auth-status:empty {
+    display: none;
+}
+
+.auth-card .auth-status.is-error {
+    color: var(--colors-error-main);
+    font-weight: 700;
+}
+
+.auth-card .account-links a {
+    color: var(--colors-purple-500);
+    font-weight: 700;
+}
+
+.auth-card .storage-info {
+    margin-top: 1rem;
+    padding: 0.85rem 1rem;
+    border-radius: var(--borderRadius-md);
+    background: #f3e8ff;
+    color: var(--colors-purple-500);
+    font-size: 0.85rem;
+}
+
+.auth-card .storage-info summary {
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.auth-card .storage-info p {
+    margin: 0.65rem 0 0;
+    line-height: 1.5;
+}
+
+@media (max-width: 600px) {
+    #authView { padding: 1rem; }
+    .auth-card { padding: 1.5rem; }
+}
+
+/* Game Arena Styling */
+.arena-container {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 1rem;
+}
+
+.arena-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.arena-header h2 {
+    font-size: 2rem;
+    color: #111827;
+}
+
+.arena-header p {
+    color: #6b7280;
+    font-size: 0.95rem;
+}
+
+/* Pending Challenge Banner */
+.challenge-banner {
+    background: linear-gradient(135deg, #7c3aed 0%, #4c1d95 100%);
+    color: white;
+    padding: 1rem 1.25rem;
+    border-radius: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    box-shadow: 0 10px 25px rgba(124, 58, 237, 0.25);
+}
+
+.banner-content {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.banner-icon {
+    font-size: 1.75rem;
+}
+
+.banner-btn {
+    background: #ffffff;
+    color: #6d28d9;
+    border: none;
+    padding: 0.5rem 1rem;
+    font-weight: 800;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+/* Grid Layout */
+.game-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1.25rem;
+}
+
+.game-card {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 1.25rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.game-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 24px rgba(0,0,0,0.06);
+}
+
+.game-icon {
+    font-size: 2.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.game-card h3 {
+    font-size: 1.1rem;
+    color: #111827;
+    margin-bottom: 0.35rem;
+}
+
+.game-card p {
+    font-size: 0.825rem;
+    color: #6b7280;
+    line-height: 1.4;
+    margin-bottom: 1rem;
+}
+
+.game-meta {
+    margin-bottom: 1rem;
+}
+
+.badge {
+    background: #f3e8ff;
+    color: #6d28d9;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 20px;
+}
+
+/* Modal Overlay */
+.game-modal {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: #ffffff;
+    padding: 2rem;
+    border-radius: 20px;
+    width: 90%;
+    max-width: 480px;
+    position: relative;
+    text-align: center;
+}
+
+.close-modal {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    border: none;
+    background: none;
+    font-size: 1.25rem;
+    cursor: pointer;
+    color: #9ca3af;
+}
+/* style.css - Getting2KU Master Theme (Kahoot Vibe) */
+
+:root {
+    --bg-dark: #121212;
+    --bg-card: #ffffff;
+    --text-dark: #333333;
+    --text-muted: #666666;
+    --kahoot-purple: #46178f;
+    --kahoot-blue: #1368ce;
+    --kahoot-green: #26890c;
+    --kahoot-red: #e21b3c;
+    --kahoot-yellow: #d89e00;
+    --border-light: #e0e0e0;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Montserrat', sans-serif, Arial;
+
+/* Room Setup Box (Kahoot Clean Card Style) */
+.room-setup-box {
+    width: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 2.5rem;
+    background: var(--bg-card);
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.room-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    text-align: center;
+    color: var(--text-dark);
+}
+
+.room-subtitle {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+/* Active Spaces History List */
+.active-spaces-container {
+    margin-bottom: 1.5rem;
+    background: #f9f9f9;
+    border: 1px solid var(--border-light);
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+.section-label {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+    letter-spacing: 0.5px;
+}
+
+.spaces-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.space-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: white;
+    border: 1px solid var(--border-light);
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+.space-code-text {
+    font-weight: 700;
+    color: var(--kahoot-purple);
+}
+
+/* Action Inputs & Buttons (Bold Kahoot Action Blocks) */
+.join-section {
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.code-input-field {
+    width: 100%;
+    padding: 1rem;
+    border-radius: 8px;
+    border: 2px solid var(--border-light);
+    background: #fdfdfd;
+    color: var(--text-dark);
+    text-align: center;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 1.1rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.code-input-field:focus {
+    border-color: var(--kahoot-blue);
+}
+
+.btn-join {
+    width: 100%;
+    background-color: var(--kahoot-green);
+    color: white;
+    border: none;
+    padding: 1rem;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-size: 1rem;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.2);
+    transition: filter 0.2s, transform 0.1s;
+}
+
+.btn-join:hover {
+    filter: brightness(1.05);
+}
+
+.btn-join:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 rgba(0,0,0,0.2);
+}
+
+.divider {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin: 1.5rem 0;
+}
+
+.generate-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.btn-generate {
+    width: 100%;
+    background-color: var(--kahoot-blue);
+    color: white;
+    border: none;
+    padding: 1rem;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-size: 1rem;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.2);
+    transition: filter 0.2s, transform 0.1s;
+}
+
+.btn-generate:hover {
+    filter: brightness(1.05);
+}
+
+.btn-generate:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0 rgba(0,0,0,0.2);
+}
+
+.btn-resume {
+    background-color: var(--kahoot-purple);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.btn-resume:hover {
+    filter: brightness(1.1);
+}
+
+a.btn-join,
+a.btn-generate,
+a.btn-resume {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    text-decoration: none;
+}
+
+/* Share Link Banner */
+.share-banner {
+    background: #f4f4f4;
+    border: 1px dashed var(--kahoot-purple);
+    padding: 1.25rem;
+    border-radius: 8px;
+    text-align: center;
+    margin-top: 15px;
+}
+
+.btn-copy {
+    background: var(--kahoot-purple);
+    color: white;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.btn-copy:hover {
+    filter: brightness(1.1);
+}
+/* KAHOOT QUESTION ARENA STYLES */
+.arena-container {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.progression-tracker-banner {
+    background: #1a2535;
+    border: 1px solid var(--kahoot-blue, #1368ce);
+    padding: 0.75rem 1.25rem;
+    border-radius: 8px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+.host-question-banner {
+    background-color: #ffffff;
+    color: #333333;
+    border-radius: 12px;
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    font-size: 1.6rem;
+    font-weight: 800;
+    box-shadow: 0 6px 0px rgba(0,0,0,0.15);
+}
+
+.answer-input-zone {
+    width: 100%;
+}
+
+.kahoot-response-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+    width: 100%;
+}
+
+.kahoot-block {
+    padding: 1.8rem 1.2rem;
+    border-radius: 8px;
+    border: none;
+    color: white;
+    font-size: 1.2rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    text-align: left;
+    width: 100%;
+    cursor: pointer;
+    box-shadow: 0 4px 0px rgba(0,0,0,0.2);
+    transition: transform 0.1s ease, filter 0.2s ease;
+}
+
+.kahoot-block:hover {
+    filter: brightness(1.08);
+}
+
+.kahoot-block:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 0px rgba(0,0,0,0.2);
+}
+
+.shape-indicator {
+    font-size: 1.5rem;
+    background-color: rgba(255, 255, 255, 0.25);
+    width: 42px;
+    height: 42px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
+/* Individual Kahoot Color Blocks */
+.block-red { background-color: #e21b3c; }
+.block-blue { background-color: #1368ce; }
+.block-yellow { background-color: #d89e00; }
+.block-green { background-color: #26890c; }
+
+.text-input-field {
+    width: 100%;
+    height: 100px;
+    background-color: #ffffff;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+    color: #333;
+    padding: 1rem;
+    resize: none;
+    font-size: 1rem;
+}
+
+.limit-lockout-screen {
+    display: none;
+    background: #ffffff;
+    color: #333;
+    border-radius: 12px;
+    padding: 2.5rem;
+    text-align: center;
+    box-shadow: 0 6px 0px rgba(0,0,0,0.15);
+}
+
+@media (max-width: 768px) {
+    .kahoot-response-grid {
+        grid-template-columns: 1fr;
+    }
+}

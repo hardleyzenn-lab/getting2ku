@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Getting2KU - Room Entry</title>
+    <!-- Linked separate stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- ROOM ENTRY & PAIRING MODULE -->
+    <main class="room-setup-box" id="roomLobby">
+        <h2 class="room-title">Join or Host a Space</h2>
+        <p class="room-subtitle">Pick an active session or start a fresh connection.</p>
+        <p id="room-account-status" class="room-subtitle" role="status" aria-live="polite">Checking account status…</p>
+
+        <!-- 1. Active Spaces Started (History List) -->
+        <div class="active-spaces-container">
+            <h3 class="section-label">Active Spaces</h3>
+            <ul id="active-spaces-list" class="spaces-list"></ul>
+        </div>
+
+        <!-- 2. Option A: Join with Existing Code -->
+        <div class="join-section">
+            <input type="text" id="space-code-input" class="code-input-field" placeholder="ENTER ROOM ID (E.G. SPACE-1234)">
+            <button class="btn-join" onclick="handleJoinWithCode()">I'm Joining. I Have a Code.</button>
+        </div>
+
+        <div class="divider">— OR —</div>
+
+        <!-- 3. Option B: Generate New Code & Invite -->
+        <div class="generate-section">
+            <button class="btn-generate" onclick="handleGenerateAndInvite()">Generate New Code and Invite</button>
+            
+            <!-- Native Share / Copy Fallback Area -->
+            <div id="invite-share-container" class="share-banner" style="display: none;">
+                <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">Generated Code: <strong id="display-new-code" style="color: var(--text-light); font-size: 1rem;"></strong></p>
+                <button class="btn-copy" onclick="copyInviteLink()">📋 Copy Invite Link</button>
+            </div>
+        </div>
+
+        <p id="room-entry-status" class="room-subtitle" role="status" aria-live="polite"></p>
+        <p id="room-pairing-result" class="room-subtitle" role="status" aria-live="polite"></p>
+    </main>
+
+    <main class="arena-container" id="sharedCardRoom" style="display: none;">
+        <div class="room-setup-box">
+            <div class="brand-badge">Shared Room</div>
+            <h1 class="room-title" id="sharedRoomTitle">Connection Cards</h1>
+            <p class="room-subtitle" id="sharedRoomProgress"></p>
+            <p class="room-subtitle" id="sharedRoomStatus" role="status" aria-live="polite"></p>
+            <div class="host-question-banner" id="sharedRoomPrompt"></div>
+            <div class="kahoot-response-grid" id="sharedRoomOptions"></div>
+            <div id="sharedRoomAnswers" class="spaces-list" style="margin-top: 1rem;"></div>
+            <section id="privateVibeCheck" class="join-section" style="display: none; margin-top: 1rem;">
+                <h2 class="room-title">Private Vibe Check</h2>
+                <p class="room-subtitle">Only you can see your choice. It will be saved to your account history.</p>
+                <div id="privateVibeChoices" class="join-section"></div>
+            </section>
+            <div class="generate-section" style="margin-top: 1rem;">
+                <button id="advanceSharedRoom" class="btn-generate" style="display: none;">Next card</button>
+                <a class="btn-resume" href="me%26u.html">Back to Me &amp; U</a>
+            </div>
+        </div>
+    </main>
+
+    <!-- ROOM ENTRY JAVASCRIPT LOGIC -->
+    <script src="realtime-client.js"></script>
+    <script src="cards.js"></script>
+    <script>
+        let activeSpaceCode = '';
+        let currentRoomState = null;
+        const statusElement = document.getElementById('room-entry-status');
+
+        function setStatus(message) {
+            statusElement.textContent = message;
+        }
+
+        function rememberSpace(code) {
+            const history = JSON.parse(localStorage.getItem('g2ku_active_spaces') || '[]');
+            if (!history.includes(code)) {
+                history.unshift(code);
+                localStorage.setItem('g2ku_active_spaces', JSON.stringify(history.slice(0, 10)));
+            }
+            renderActiveSpaces();
+        }
+
+        function showRoomState(state) {
+            currentRoomState = state;
+            if (state.status === 'paired') {
+                document.getElementById('roomLobby').style.display = 'none';
+                document.getElementById('sharedCardRoom').style.display = 'block';
+                renderSharedRoomCard(state).catch(error => {
+                    console.error('Unable to render the shared room card:', error);
+                    document.getElementById('sharedRoomStatus').textContent = error.message;
+                });
+                return;
+            }
+            document.getElementById('roomLobby').style.display = 'block';
+            document.getElementById('sharedCardRoom').style.display = 'none';
+            if (state.status === 'completed') {
+                document.getElementById('roomLobby').style.display = 'none';
+                document.getElementById('sharedCardRoom').style.display = 'block';
+                showCompletedRoom(state);
+                return;
+            }
+            document.getElementById('room-pairing-result').textContent = `Room ${state.roomCode} is waiting for your partner.`;
+            setStatus(`Room ${state.roomCode} is waiting for your partner.`);
+        }
+
+        function handleRoomMessage(message) {
+            if (message.type !== 'room_state' || message.state.roomCode !== activeSpaceCode) return;
+            showRoomState(message.state);
+        }
+
+        function createRoomButton(label, handler, className = 'kahoot-block block-blue') {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = className;
+            button.textContent = label;
+            button.addEventListener('click', handler);
+            return button;
+        }
+
+        async function renderSharedRoomCard(state) {
+            await G2KUCardEngine.ready;
+            const card = G2KUCardEngine.getCard(state.roundIndex, state.tier);
+            const progress = document.getElementById('sharedRoomProgress');
+            const status = document.getElementById('sharedRoomStatus');
+            const prompt = document.getElementById('sharedRoomPrompt');
+            const options = document.getElementById('sharedRoomOptions');
+            const answers = document.getElementById('sharedRoomAnswers');
+            const vibeSection = document.getElementById('privateVibeCheck');
+            const vibeChoices = document.getElementById('privateVibeChoices');
+            const advanceButton = document.getElementById('advanceSharedRoom');
+            const checkpoint = (state.roundIndex + 1) % 5 === 0 ||
+                state.roundIndex + 1 === state.cardLimit;
+
+            progress.textContent =
+                `Room ${state.roomCode} · Card ${state.roundIndex + 1} of ${state.cardLimit} · ${state.tier.replaceAll('_', ' ')} pass`;
+            prompt.textContent = card.prompt;
+            options.replaceChildren();
+            answers.replaceChildren();
+            vibeChoices.replaceChildren();
+            vibeSection.style.display = 'none';
+            advanceButton.style.display = 'none';
+            document.getElementById('sharedRoomTitle').textContent =
+                `${state.playerName || state.role} & ${state.partnerName || 'Partner'}`;
+
+            if (state.revealedAnswers) {
+                status.textContent = 'Both players answered. Your answers are now shared.';
+                for (const entry of state.revealedAnswers) {
+                    const item = document.createElement('p');
+                    item.className = 'space-item';
+                    item.textContent = `${entry.role === 'host' ? 'Host' : 'Guest'}: ${entry.answer}`;
+                    answers.appendChild(item);
+                }
+            } else if (state.hasSubmitted) {
+                status.textContent = 'Your answer is saved. Waiting for your partner to answer.';
+            } else {
+                status.textContent = 'Choose your answer. Your partner will not see it until both answer.';
+                const blockClasses = [
+                    'kahoot-block block-red',
+                    'kahoot-block block-blue',
+                    'kahoot-block block-yellow',
+                    'kahoot-block block-green'
+                ];
+                card.options.forEach((answer, index) => {
+                    options.appendChild(createRoomButton(answer, () => submitRoomAnswer(card, answer), blockClasses[index]));
+                });
+            }
+
+            if (checkpoint && state.revealedAnswers) {
+                vibeSection.style.display = 'block';
+                if (state.hasVibeCheck) {
+                    const saved = document.createElement('p');
+                    saved.className = 'room-subtitle';
+                    saved.textContent = 'Your private vibe check is saved.';
+                    vibeChoices.appendChild(saved);
+                } else if (state.isSignedIn) {
+                    for (const choice of ['Marry them ❤️', 'Ghost them 👻', 'Like & Subscribe 🔔']) {
+                        vibeChoices.appendChild(createRoomButton(choice, () => savePrivateVibeCheck(choice)));
+                    }
+                } else {
+                    const note = document.createElement('p');
+                    note.className = 'room-subtitle';
+                    note.textContent = 'Sign in to save a private vibe check. You can continue without saving.';
+                    vibeChoices.appendChild(note);
+                }
+            }
+
+            if (state.role === 'host' && state.revealedAnswers && state.roundIndex < state.cardLimit) {
+                advanceButton.style.display = 'block';
+                advanceButton.textContent = state.roundIndex + 1 === state.cardLimit
+                    ? 'Finish room'
+                    : 'Next card';
+                advanceButton.onclick = advanceSharedRoom;
+                advanceButton.disabled = checkpoint && state.isSignedIn && !state.hasVibeCheck;
+            } else if (state.role === 'guest' && state.revealedAnswers) {
+                status.textContent += ' The host will start the next card.';
+            }
+        }
+
+        function showCompletedRoom(state) {
+            document.getElementById('sharedRoomTitle').textContent = 'Room complete';
+            document.getElementById('sharedRoomProgress').textContent =
+                `Room ${state.roomCode} · ${state.cardLimit} cards completed`;
+            document.getElementById('sharedRoomStatus').textContent = state.isSignedIn
+                ? 'Your shared answers and your private vibe checks are saved to your account history.'
+                : 'The card pass is complete. Sign in to save future rooms to your account history.';
+            document.getElementById('sharedRoomPrompt').textContent = '';
+            document.getElementById('sharedRoomOptions').replaceChildren();
+            document.getElementById('sharedRoomAnswers').replaceChildren();
+            document.getElementById('privateVibeCheck').style.display = 'none';
+            document.getElementById('advanceSharedRoom').style.display = 'none';
+        }
+
+        async function submitRoomAnswer(card, answer) {
+            try {
+                await G2KURoomClient.request('submit_answer', {
+                    answer,
+                    questionId: card.id,
+                    prompt: card.prompt
+                });
+            } catch (error) {
+                document.getElementById('sharedRoomStatus').textContent = error.message;
+            }
+        }
+
+        async function savePrivateVibeCheck(choice) {
+            try {
+                await G2KURoomClient.request('save_vibe_check', {
+                    roundIndex: currentRoomState.roundIndex,
+                    choice
+                });
+            } catch (error) {
+                document.getElementById('sharedRoomStatus').textContent = error.message;
+            }
+        }
+
+        async function advanceSharedRoom() {
+            const button = document.getElementById('advanceSharedRoom');
+            button.disabled = true;
+            try {
+                await G2KURoomClient.request('advance_round');
+            } catch (error) {
+                document.getElementById('sharedRoomStatus').textContent = error.message;
+                button.disabled = false;
+            }
+        }
+
+        async function renderAccountStatus() {
+            const element = document.getElementById('room-account-status');
+            try {
+                const response = await fetch('/api/auth/session', { credentials: 'same-origin' });
+                if (response.status === 401) {
+                    element.textContent = 'Not signed in. Room pairing still works with this browser’s anonymous player ID.';
+                    return;
+                }
+                if (!response.ok) throw new Error(`Account check failed (HTTP ${response.status}).`);
+                const result = await response.json();
+                element.textContent = `Signed in as ${result.user.name} · ${result.user.tier.replaceAll('_', ' ')} access.`;
+            } catch (error) {
+                console.error('Unable to check room account status:', error);
+                element.textContent = `Unable to check account status: ${error.message}`;
+            }
+        }
+
+        async function connectToRoomService() {
+            await G2KURoomClient.connect(handleRoomMessage, status => {
+                if (status === 'disconnected') {
+                    setStatus('Disconnected from the room service. Refresh to reconnect.');
+                }
+            });
+        }
+
+        async function handleJoinWithCode() {
+            const input = document.getElementById('space-code-input');
+            const code = input.value.trim().toUpperCase();
+            if (!code) {
+                setStatus('Enter the room code your partner shared with you.');
+                return;
+            }
+
+            activeSpaceCode = code;
+            setStatus('Joining the room…');
+            try {
+                await connectToRoomService();
+                let result;
+                try {
+                    result = await G2KURoomClient.request('join_room', {
+                        roomCode: code,
+                        playerId: G2KURoomClient.getPlayerId()
+                    });
+                } catch (error) {
+                    if (!error.message.startsWith('This device created the room.') &&
+                        !error.message.startsWith('Join from a different account') &&
+                        !error.message.startsWith('This room already has two players.')) throw error;
+                    result = await G2KURoomClient.request('resume_room', {
+                        roomCode: code,
+                        playerId: G2KURoomClient.getPlayerId()
+                    });
+                }
+                rememberSpace(code);
+                showRoomState(result.state);
+            } catch (error) {
+                setStatus(error.message);
+            }
+        }
+
+        async function handleGenerateAndInvite() {
+            setStatus('Creating a room…');
+            try {
+                await connectToRoomService();
+                const result = await G2KURoomClient.request('create_room', {
+                    playerId: G2KURoomClient.getPlayerId()
+                });
+                activeSpaceCode = result.state.roomCode;
+                rememberSpace(activeSpaceCode);
+
+                document.getElementById('display-new-code').innerText = activeSpaceCode;
+                document.getElementById('invite-share-container').style.display = 'block';
+                showRoomState(result.state);
+                setStatus('Room created. Share the code or invite link with your partner.');
+            } catch (error) {
+                setStatus(error.message);
+            }
+        }
+
+        async function copyInviteLink() {
+            const inviteUrl = new URL(window.location.href);
+            inviteUrl.searchParams.set('room', activeSpaceCode);
+            try {
+                await navigator.clipboard.writeText(inviteUrl.href);
+                setStatus('Invite link copied. Send it to your partner.');
+            } catch (error) {
+                setStatus(`Copy failed. Share this room code instead: ${activeSpaceCode}`);
+            }
+        }
+
+        async function resumeSpace(code) {
+            activeSpaceCode = code;
+            setStatus(`Reconnecting to room ${code}…`);
+            try {
+                await connectToRoomService();
+                const result = await G2KURoomClient.request('resume_room', {
+                    roomCode: code,
+                    playerId: G2KURoomClient.getPlayerId()
+                });
+                showRoomState(result.state);
+            } catch (error) {
+                setStatus(error.message);
+            }
+        }
+
+        function renderActiveSpaces() {
+            const list = document.getElementById('active-spaces-list');
+            const history = JSON.parse(localStorage.getItem('g2ku_active_spaces') || '[]');
+            list.replaceChildren();
+
+            history.forEach(code => {
+                if (typeof code !== 'string' || !/^[A-HJ-NP-Z2-9]{8}$/.test(code)) return;
+                const item = document.createElement('li');
+                item.className = 'space-item';
+
+                const label = document.createElement('span');
+                label.className = 'space-code-text';
+                label.textContent = code;
+
+                const button = document.createElement('button');
+                button.className = 'btn-resume';
+                button.textContent = 'Resume';
+                button.addEventListener('click', () => resumeSpace(code));
+
+                item.append(label, button);
+                list.appendChild(item);
+            });
+        }
+
+        renderActiveSpaces();
+        renderAccountStatus();
+        const inviteCode = new URLSearchParams(window.location.search).get('room');
+        if (inviteCode) {
+            document.getElementById('space-code-input').value = inviteCode.toUpperCase();
+            handleJoinWithCode();
+        }
+    </script>
+    <script src="site-layout.js"></script>
+</body>
+</html>

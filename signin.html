@@ -1,0 +1,100 @@
+<link rel="stylesheet" href="style.css">
+
+<main class="view-panel active" id="authView">
+    <div class="auth-card">
+        <h2>Welcome to G2KU</h2>
+
+        <!-- SCREEN 1: Standard Sign-In -->
+        <div id="signInSection">
+            <p>Enter your email and password to jump back in.</p>
+            <form id="signInForm" onsubmit="handleSignInSubmit(event)">
+                <p class="auth-status" id="signInStatus" role="status" aria-live="polite"></p>
+                <div class="form-group">
+                    <label>Email Address</label>
+                    <input type="email" id="signInEmail" class="input-field" placeholder="you@example.com" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="signInPassword" autocomplete="current-password" class="input-field" required>
+                </div>
+                <button type="submit" class="action-button">Unlock Session</button>
+                
+                <div style="display: flex; justify-content: space-between; margin-top: 1rem; font-size: 0.85rem;">
+                    <a href="#" onclick="switchAuthSubView('forgotPin'); return false;" style="color: var(--colors-purple-300); font-weight: 700; text-decoration: none;">Forgot password?</a>
+                    <a href="#" onclick="switchAuthSubView('lostEmail')" style="color: var(--colors-purple-300); font-weight: 700; text-decoration: none;">Lost Email Access?</a>
+                </div>
+            </form>
+            <p class="account-links">New to G2KU? <a href="signup.html">Create an account</a></p>
+            <section id="demoAccountsSection" hidden>
+                <h3>Development test accounts</h3>
+                <p>These mock accounts are available only outside production. Use separate browser profiles to test two players.</p>
+                <div id="demoAccountButtons" class="join-section"></div>
+                <p class="auth-status" id="demoAccountStatus" role="status" aria-live="polite"></p>
+            </section>
+            <details class="storage-info">
+                <summary>Where is my account stored?</summary>
+                <p>Your account is stored on the Getting2KU server so you can sign in from different devices. Passwords and recovery answers are stored as salted hashes. Use a unique password and keep access to your registered email.</p>
+            </details>
+        </div>
+
+        <!-- Password recovery: verify account details and email code -->
+        <div id="forgotPinSection" style="display: none;">
+            <h3>Reset Your Password</h3>
+            <p>Verify your account details first. We’ll then send a code to your registered email.</p>
+            <form id="recoveryDetailsForm" onsubmit="handleRecoveryRequestSubmit(event)">
+                <p class="auth-status" id="recoveryStatus" role="status" aria-live="polite"></p>
+                <div class="form-group">
+                    <label>Registered Email</label>
+                    <input type="email" id="recEmail" class="input-field" required>
+                </div>
+                <div class="form-group">
+                    <label>Date of Birth (DOB)</label>
+                    <input type="date" id="recDob" class="input-field" required>
+                </div>
+                <div class="form-group">
+                    <label>Security Question</label>
+                    <select id="recSecQuestion" class="input-select" required>
+                        <option value="pet">What was the name of your first pet?</option>
+                        <option value="city">In what city were you born?</option>
+                        <option value="car">What was the make of your first car?</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Security Answer</label>
+                    <input type="text" id="recSecAnswer" class="input-field" placeholder="Security answer" required>
+                </div>
+                <button type="submit" class="action-button">Verify Details &amp; Send Code</button>
+                <p style="text-align: center; margin-top: 1rem;">
+                    <a href="#" onclick="switchAuthSubView('signIn'); return false;" style="color: var(--colors-purple-300); font-weight: 700; text-decoration: none;">Back to Sign In</a>
+                </p>
+            </form>
+            <form id="resetPasswordForm" onsubmit="handlePasswordResetSubmit(event)" hidden>
+                <div class="form-group">
+                    <label for="resetCode">Email verification code</label>
+                    <input type="text" id="resetCode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" class="input-field" required>
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">New password</label>
+                    <input type="password" id="newPassword" minlength="12" maxlength="200" autocomplete="new-password" class="input-field" required>
+                </div>
+                <p class="auth-status" id="resetPasswordStatus" role="status" aria-live="polite"></p>
+                <button type="submit" class="action-button">Reset Password</button>
+                <p style="text-align: center; margin-top: 1rem;">
+                    <a href="#" onclick="switchAuthSubView('signIn'); return false;" style="color: var(--colors-purple-300); font-weight: 700; text-decoration: none;">Back to Sign In</a>
+                </p>
+            </form>
+        </div>
+
+        <!-- SCREEN 3: Lost Email Access -->
+        <div id="lostEmailSection" style="display: none;">
+            <h3>Account Recovery Request</h3>
+            <p>If you can’t access your registered email, automated password recovery can’t verify account ownership. Contact support to recover access.</p>
+            <p style="text-align: center; margin-top: 1rem;">
+                <a href="#" onclick="switchAuthSubView('signIn'); return false;" style="color: var(--colors-purple-300); font-weight: 700; text-decoration: none;">Back to Sign In</a>
+            </p>
+        </div>
+
+    </div>
+    <script src="app.js"></script>
+</main>
+<script src="site-layout.js"></script>

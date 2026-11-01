@@ -1,0 +1,60 @@
+<link rel="stylesheet" href="style.css">
+
+<main class="view-panel active" id="authView">
+    <div class="auth-card">
+        <h2>Join G2KU</h2>
+        <p>Less texting. More connecting. Set up your profile.</p>
+
+        <form id="signUpForm" onsubmit="handleSignUpSubmit(event)">
+            <p class="auth-status" id="signUpStatus" role="status" aria-live="polite"></p>
+            <div class="form-group">
+                <label>Name or Nickname</label>
+                <input type="text" id="regName" class="input-field" placeholder="Stacie" required>
+            </div>
+            <div class="form-group">
+                <label>Email Address</label>
+                <input type="email" id="regEmail" class="input-field" placeholder="you@example.com" required>
+            </div>
+            <div class="form-group">
+                <label>Date of Birth (DOB)</label>
+                <input type="date" id="regDob" class="input-field" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="regPassword" minlength="12" maxlength="200" autocomplete="new-password" class="input-field" placeholder="At least 12 characters" required>
+            </div>
+            <div class="form-group">
+                <label>Security Question (Required for Recovery)</label>
+                <select id="regSecQuestion" class="input-select">
+                    <option value="pet">What was the name of your first pet?</option>
+                    <option value="city">In what city were you born?</option>
+                    <option value="car">What was the make of your first car?</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Security Answer</label>
+                <input type="text" id="regSecAnswer" class="input-field" placeholder="Your answer" required>
+            </div>
+            <button type="submit" class="action-button">Send Verification Code</button>
+        </form>
+
+        <form id="registerVerificationForm" onsubmit="handleRegisterVerificationSubmit(event)" hidden>
+            <p>Enter the six-digit code sent to your email. The code expires in 10 minutes.</p>
+            <div class="form-group">
+                <label for="registerCode">Email verification code</label>
+                <input type="text" id="registerCode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" class="input-field" required>
+            </div>
+            <p class="auth-status" id="registerVerificationStatus" role="status" aria-live="polite"></p>
+            <button type="submit" class="action-button">Verify Email &amp; Create Account</button>
+        </form>
+
+        <p class="account-links">Already have an account? <a href="signin.html">Sign in</a></p>
+        <details class="storage-info">
+            <summary>Where is my account stored?</summary>
+            <p>Your account is stored on the Getting2KU server so you can sign in from different devices. Passwords and recovery answers are stored as salted hashes. Use a unique password and keep access to your registered email.</p>
+        </details>
+    </div>
+    <script src="app.js"></script>
+    <script src="site-layout.js"></script>
+</body>
+</main>

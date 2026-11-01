@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Me &amp; U - Saved History</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main class="arena-container">
+        <section class="room-setup-box">
+            <div class="brand-badge">Your G2KU History</div>
+            <h1 class="room-title">Me &amp; U</h1>
+            <p class="room-subtitle">Saved shared answers and your private vibe checks. Your vibe checks are visible only to you.</p>
+            <p id="historyStatus" class="room-subtitle" role="status" aria-live="polite">Loading saved history…</p>
+            <div id="savedRoomHistory" class="spaces-list"></div>
+            <div class="generate-section">
+                <a href="rooms.html" class="btn-generate">Start or Join a Room</a>
+                <a href="signin.html" id="historySignIn" class="btn-join" style="display: none;">Sign in</a>
+                <button id="signOutButton" class="btn-resume" style="display: none;">Sign out</button>
+            </div>
+        </section>
+    </main>
+
+    <script src="history.js"></script>
+    <script>
+        const historyStatus = document.getElementById('historyStatus');
+        const signOutButton = document.getElementById('signOutButton');
+        const historySignIn = document.getElementById('historySignIn');
+
+        async function loadAccountStatus() {
+            try {
+                const response = await fetch('/api/auth/session', { credentials: 'same-origin' });
+                if (response.status === 401) {
+                    historySignIn.style.display = 'inline-flex';
+                    return;
+                }
+                if (!response.ok) throw new Error(`Could not load your account (HTTP ${response.status}).`);
+                signOutButton.style.display = 'inline-flex';
+            } catch (error) {
+                console.error('Unable to load account status:', error);
+                historyStatus.textContent = error.message;
+            }
+        }
+
+        signOutButton.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    credentials: 'same-origin'
+                });
+                if (!response.ok) {
+                    historyStatus.textContent = 'Could not sign out. Please try again.';
+                    return;
+                }
+                localStorage.removeItem('g2ku_profile');
+                window.location.href = 'signin.html';
+            } catch (error) {
+                console.error('Unable to sign out:', error);
+                historyStatus.textContent = 'Could not reach the account service. Please try again.';
+            }
+        });
+
+        loadAccountStatus();
+        renderSavedRoomHistory('savedRoomHistory').catch(error => {
+            console.error('Unable to load saved room history:', error);
+            historyStatus.textContent = error.message;
+        });
+    </script>
+    <script src="site-layout.js"></script>
+</body>
+</html>

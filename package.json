@@ -1,0 +1,18 @@
+{
+  "name": "getting2ku-realtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Realtime two-player rooms for Getting2KU",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --check app.js && node --check games-engine.js && node --check realtime-client.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pg": "^8.16.3",
+    "ws": "^8.18.3"
+  }
+}
