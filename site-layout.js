@@ -21,9 +21,9 @@
             </a>
             <a href="rooms.html" class="nav-pill blue-btn">
                 <span class="shape-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><polygon points="12,2 22,12 12,22 2,12"/></svg></span>
-                <span>Rooms &amp; Cards</span>
+                <span>Rooms</span>
             </a>
-            <a href="test%20game.html" class="nav-pill yellow-btn">
+            <a href="game.html" class="nav-pill yellow-btn">
                 <span class="shape-badge" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg></span>
                 <span>Mini Games</span>
             </a>

@@ -1,13 +1,11 @@
 /**
  * Getting2KU (G2KU) - Games Engine (games-engine.js)
- * Modular asynchronous turn-locked logic for all 7 mini-games.
+ * Modular asynchronous turn-locked logic for the mini-games.
  */
 
 window.G2KUGames = {
     activeGame: null,
-    tttBoard: Array(9).fill(''),
-    tttTurn: 'X',
-    tttActive: true,
+    ticTacToeState: null,
     c4Board: [],
     c4Turn: '🔴',
 
@@ -20,10 +18,7 @@ window.G2KUGames = {
 
         switch(gameId) {
             case 'tictactoe':
-                this.tttBoard = Array(9).fill('');
-                this.tttTurn = 'X';
-                this.tttActive = true;
-                this.renderTicTacToe(container);
+                this.renderTicTacToe(container, this.ticTacToeState);
                 break;
             case 'connectfour':
                 this.c4Board = Array(6).fill().map(() => Array(7).fill(''));
@@ -32,18 +27,6 @@ window.G2KUGames = {
                 break;
             case 'memorymatch':
                 this.renderMemoryMatch(container);
-                break;
-            case 'triviaduel':
-                this.renderTriviaDuel(container);
-                break;
-            case 'wordguesser':
-                this.renderWordGuesser(container);
-                break;
-            case 'diceroll':
-                this.renderDiceRoll(container);
-                break;
-            case 'hotseat':
-                this.renderHotSeat(container);
                 break;
             default:
                 container.innerHTML += `<p style="color:red;">Invalid game ID.</p>`;
@@ -54,65 +37,145 @@ window.G2KUGames = {
         const titles = {
             'tictactoe': 'Tic-Tac-Toe',
             'connectfour': 'Connect Four',
-            'memorymatch': 'Memory Match',
-            'triviaduel': 'Trivia Duel',
-            'wordguesser': 'Word Guesser',
-            'diceroll': 'Dice Roll / High-Low',
-            'hotseat': '21 Questions / Hot Seat'
+            'memorymatch': 'Memory Match'
         };
         return titles[id] || 'Mini-Game';
     },
 
-    // 1. Tic-Tac-Toe
-    renderTicTacToe(container) {
-        let boardHTML = `<div style="display:grid; grid-template-columns:repeat(3,70px); gap:6px; margin: 15px auto; width: fit-content;">`;
-        for(let i=0; i<9; i++) {
-            boardHTML += `<button onclick="G2KUGames.makeTTTMove(${i})" style="width:70px; height:70px; font-size:28px; font-weight:bold; cursor:pointer;" id="cell-${i}">-</button>`;
-        }
-        boardHTML += `</div><p id="ttt-status" style="font-weight:bold; color:#7c3aed;">Game active. Make your move!</p>`;
-        container.innerHTML += boardHTML;
-    },
-    makeTTTMove(index) {
-        if (!this.tttActive || this.tttBoard[index] !== '') return;
-        
-        const currentUser = JSON.parse(localStorage.getItem('g2ku_profile')) || { name: 'Player 1' };
-        const activeGame = JSON.parse(localStorage.getItem('g2ku_active_game')) || { challengerName: 'Player 1' };
-        const isChallenger = currentUser.name === activeGame.challengerName;
-        
-        const myAssignedSymbol = isChallenger ? 'X' : 'O';
-        if (this.tttTurn !== myAssignedSymbol) {
-            document.getElementById('ttt-status').innerText = `⏳ Hold on! Waiting for your partner's turn.`;
+    renderTicTacToe(container, state) {
+        if (!state) {
+            container.innerHTML += '<p>Join or create a paired room to start a series.</p>';
             return;
         }
 
-        this.tttBoard[index] = this.tttTurn;
-        const cell = document.getElementById(`cell-${index}`);
-        cell.innerText = this.tttTurn;
-        cell.style.color = this.tttTurn === 'X' ? '#7c3aed' : '#db2777';
+        const myRole = state.myRole ||
+            (state.players.host.id === window.G2KURoomClient.getPlayerId() ? 'host' : 'guest');
+        const round = state.currentRound;
+        const section = document.createElement('section');
+        section.className = 'ttt-match';
 
-        const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-        let won = false;
-        for (let w of wins) {
-            if (this.tttBoard[w[0]] && this.tttBoard[w[0]] === this.tttBoard[w[1]] && this.tttBoard[w[0]] === this.tttBoard[w[2]]) {
-                won = true;
-                break;
+        const seriesHeader = document.createElement('div');
+        seriesHeader.className = 'ttt-series-header';
+        const roundTitle = document.createElement('p');
+        roundTitle.className = 'ttt-round-title';
+        roundTitle.textContent = state.status === 'complete' ? 'Series complete' : `Round ${state.roundNumber}`;
+        const roundCount = document.createElement('span');
+        roundCount.className = 'ttt-round-count';
+        roundCount.textContent = 'BEST OF 5';
+        seriesHeader.append(roundTitle, roundCount);
+        section.appendChild(seriesHeader);
+
+        const scoreRow = document.createElement('div');
+        scoreRow.className = 'ttt-players';
+        for (const role of ['host', 'guest']) {
+            const player = state.players[role];
+            const playerCard = document.createElement('div');
+            playerCard.className = `ttt-player${role === myRole ? ' is-you' : ''}`;
+            const playerInfo = document.createElement('div');
+            playerInfo.className = 'ttt-player-info';
+            const token = document.createElement('span');
+            token.className = 'ttt-player-token';
+            token.textContent = player.token;
+            const playerName = document.createElement('span');
+            playerName.className = 'ttt-player-name';
+            playerName.textContent = player.name;
+            const playerStats = document.createElement('div');
+            playerStats.className = 'ttt-player-stats';
+            const points = document.createElement('small');
+            points.textContent = `${state.points[role]} points`;
+            playerStats.append(playerName, points);
+            playerInfo.append(token, playerStats);
+            const playerScore = document.createElement('strong');
+            playerScore.className = 'ttt-player-score';
+            playerScore.textContent = String(state.wins[role]);
+            playerScore.setAttribute('aria-label', `${state.wins[role]} round wins`);
+            playerCard.append(playerInfo, playerScore);
+            scoreRow.appendChild(playerCard);
+        }
+        section.appendChild(scoreRow);
+
+        const roundProgress = document.createElement('div');
+        roundProgress.className = 'ttt-round-progress';
+        for (let index = 1; index <= 5; index += 1) {
+            const roundMarker = document.createElement('span');
+            roundMarker.className = `ttt-round-marker${index < state.roundNumber ? ' is-played' : ''}` +
+                `${index === state.roundNumber ? ' is-current' : ''}`;
+            roundMarker.setAttribute('aria-label', `Round ${index}`);
+            roundProgress.appendChild(roundMarker);
+        }
+        section.appendChild(roundProgress);
+
+        const board = document.createElement('div');
+        board.className = 'ttt-board';
+        for (let index = 0; index < round.board.length; index += 1) {
+            const role = round.board[index];
+            const cell = document.createElement('button');
+            cell.type = 'button';
+            cell.textContent = role ? state.players[role].token : '';
+            cell.setAttribute('aria-label', `Cell ${index + 1}${role ? `, ${state.players[role].name}` : ', empty'}`);
+            cell.className = 'ttt-cell';
+            cell.disabled = Boolean(role) || state.status !== 'active' ||
+                round.status !== 'active' || round.turn !== myRole;
+            if (!cell.disabled) {
+                cell.style.cursor = 'pointer';
+                cell.addEventListener('click', () => window.submitTicTacToeMove(index));
             }
+            board.appendChild(cell);
+        }
+        section.appendChild(board);
+
+        const status = document.createElement('p');
+        status.id = 'ttt-status';
+        status.className = 'ttt-status';
+        if (state.optimisticMove) {
+            status.textContent = 'Move sent! Your partner is up.';
+            status.classList.add('is-waiting');
+        } else if (state.status === 'complete') {
+            status.textContent = state.seriesWinner
+                ? `🏆 ${state.players[state.seriesWinner].name} takes the series!`
+                : 'The series ends in a draw.';
+            status.classList.add('is-result');
+        } else if (round.status === 'complete') {
+            status.textContent = round.winner
+                ? `${round.result?.message || 'Round complete.'} ${state.points[round.winner]} points`
+                : 'It’s a draw! 2 points each.';
+            status.classList.add('is-result');
+        } else if (round.turn === myRole) {
+            status.textContent = 'Your turn — make a move!';
+            status.classList.add('is-your-turn');
+        } else {
+            status.textContent = `${state.players[round.turn].name} is up next`;
+            status.classList.add('is-waiting');
+        }
+        section.appendChild(status);
+
+        const earnedBadges = ['host', 'guest'].flatMap(role =>
+            state.badges[role].map(badge => `${state.players[role].name}: ${badge}`));
+        if (earnedBadges.length) {
+            const badges = document.createElement('p');
+            badges.className = 'ttt-badges';
+            badges.textContent = earnedBadges.join('  ·  ');
+            section.appendChild(badges);
         }
 
-        if (won) {
-            document.getElementById('ttt-status').innerText = `🎉 Player ${this.tttTurn} Wins!`;
-            this.tttActive = false;
-            return;
+        if (round.status === 'complete' && state.status === 'active') {
+            const nextRound = document.createElement('button');
+            nextRound.type = 'button';
+            nextRound.className = 'ttt-action-button';
+            nextRound.textContent = `Play Round ${state.roundNumber + 1}`;
+            nextRound.addEventListener('click', () => window.advanceTicTacToeRound());
+            section.appendChild(nextRound);
+        }
+        if (state.status === 'complete') {
+            const newSeries = document.createElement('button');
+            newSeries.type = 'button';
+            newSeries.className = 'ttt-action-button';
+            newSeries.textContent = 'Play Again';
+            newSeries.addEventListener('click', () => window.startNewTicTacToeSeries());
+            section.appendChild(newSeries);
         }
 
-        if (!this.tttBoard.includes('')) {
-            document.getElementById('ttt-status').innerText = `🤝 It's a Draw!`;
-            this.tttActive = false;
-            return;
-        }
-
-        this.tttTurn = this.tttTurn === 'X' ? 'O' : 'X';
-        document.getElementById('ttt-status').innerText = `Waiting for Partner's move...`;
+        container.appendChild(section);
     },
 
     // 2. Connect Four
@@ -151,27 +214,5 @@ window.G2KUGames = {
     // 3. Memory Match
     renderMemoryMatch(container) {
         container.innerHTML += `<p style="color:#a78bfa;">Memory Match locked to async partner turns.</p>`;
-    },
-
-    // 4. Trivia Duel
-    renderTriviaDuel(container) {
-        container.innerHTML += `<p style="margin-top:10px;"><strong>Question:</strong> What's our official couple vibe?</p>` +
-                               `<button onclick="alert('Answer locked!')" style="display:block; margin:5px auto; padding:8px;">A) Chaos & Coffee</button>` +
-                               `<button onclick="alert('Answer locked!')" style="display:block; margin:5px auto; padding:8px;">B) Unstoppable Team</button>`;
-    },
-
-    // 5. Word Guesser
-    renderWordGuesser(container) {
-        container.innerHTML += `<div style="margin:15px;"><p>Guess the 5-letter password:</p><input type="text" maxlength="5" id="wg-input" style="padding:6px;"><button onclick="alert('Guess submitted!')">Submit</button></div>`;
-    },
-
-    // 6. Dice Roll
-    renderDiceRoll(container) {
-        container.innerHTML += `<div style="margin:15px;"><p>Current Die: <strong>🎲 5</strong></p><button onclick="alert('Locked in!')">Higher 📈</button> <button onclick="alert('Locked in!')">Lower 📉</button></div>`;
-    },
-
-    // 7. Hot Seat
-    renderHotSeat(container) {
-        container.innerHTML += `<div style="margin:15px;"><p>Hot Seat Question:</p><textarea placeholder="Type your answer..." style="width:80%; height:60px;"></textarea><br><button onclick="alert('Submitted!')" style="margin-top:8px;">Send Answer 🔒</button></div>`;
     }
 };

@@ -111,12 +111,67 @@ function canDrawCards(user, requestedPicksCount = 0) {
   return { allowed: true };
 }
 
+function getRandomCategoryByWeight(availableCategories, randomValue = Math.random()) {
+  const weights = {
+    1: 10, 2: 10, 3: 10, 4: 10, 5: 10,
+    6: 4.37, 7: 4.37, 8: 4.37, 9: 4.37, 10: 4.37, 11: 4.37, 12: 4.37, 16: 4.37,
+    13: 2.5, 14: 2.5, 15: 2.5, 17: 2.5, 18: 2.5, 19: 2.5
+  };
+
+  const validEntries = availableCategories.map(cat => ({
+    categoryId: cat.categoryId,
+    category: cat.category,
+    weight: weights[cat.categoryId] || 5
+  }));
+
+  const totalWeight = validEntries.reduce((sum, entry) => sum + entry.weight, 0);
+  let randomNum = randomValue * totalWeight;
+
+  for (const entry of validEntries) {
+    if (randomNum < entry.weight) {
+      return entry;
+    }
+    randomNum -= entry.weight;
+  }
+
+  return validEntries[0];
+}
+
+function getSeededRandomValue(seed) {
+  let hash = 2166136261;
+  for (const character of seed) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967296;
+}
+
 // ==========================================
 // 4. ENGINE INTERFACE & ROUTER BRIDGE
 // ==========================================
 const G2KUCardEngine = {
   state: userState,
   ready: questionsReady,
+
+  getCardLimit(tier) {
+    const config = getTierConfig(tier);
+    if (tier === 'unlocked') return config.monthlyCap;
+    if (tier === 'tier_30_day') {
+      return config.baseWeeklyCards + config.videoBonusCards;
+    }
+    return config.maxCardsPerWeek;
+  },
+
+  isVibeCheckCheckpoint(cardIndex, tier) {
+    if (!Number.isInteger(cardIndex) || cardIndex < 0) {
+      throw new Error('Card index must be a non-negative integer.');
+    }
+    const cardLimit = this.getCardLimit(tier);
+    if (cardIndex >= cardLimit) {
+      throw new Error('Card index exceeds the card limit.');
+    }
+    return (cardIndex + 1) % 5 === 0 || cardIndex + 1 === cardLimit;
+  },
 
   checkSubscriptionGate() {
     const gateCheck = canDrawCards(this.state);
@@ -137,7 +192,8 @@ const G2KUCardEngine = {
   getCard(
     cardIndex = this.state.weeklyCardCount,
     tier = this.state.tier,
-    selectedCategoryIds = this.state.selectedCategoryIds
+    selectedCategoryIds = this.state.selectedCategoryIds,
+    seed = null
   ) {
     if (typeof cardDeck === 'undefined') {
       throw new Error('Wait for the question deck to finish loading.');
@@ -151,9 +207,11 @@ const G2KUCardEngine = {
       throw new Error('No question categories are available for this access tier.');
     }
 
-    const categoryEntry = categories[cardIndex % categories.length];
-    const questionIndex = Math.floor(cardIndex / categories.length) %
-      categoryEntry.category.questions.length;
+    const categoryEntry = getRandomCategoryByWeight(
+      categories,
+      seed === null ? Math.random() : getSeededRandomValue(seed)
+    );
+    const questionIndex = cardIndex % categoryEntry.category.questions.length;
     const question = categoryEntry.category.questions[questionIndex];
 
     return {
@@ -174,8 +232,10 @@ const G2KUCardEngine = {
     this.state.weeklyCardCount++;
     this.state.monthlyCardCount++;
     
-    // Trigger private vibe check every 5 cards
-    const triggerVibeCheck = ((this.state.weeklyCardCount % 5) === 0);
+    const triggerVibeCheck = this.isVibeCheckCheckpoint(
+      this.state.weeklyCardCount - 1,
+      this.state.tier
+    );
     return { success: true, triggerVibeCheck };
   },
 
@@ -198,8 +258,10 @@ const G2KUCardEngine = {
       hostPlayerId,
       guestPlayerId,
       tier,
-      roundIndex: 0,
-      answers: {}
+      hostAnswers: {},
+      guestAnswers: {},
+      hostCompleted: false,
+      guestCompleted: false
     };
   },
 
@@ -213,18 +275,6 @@ const G2KUCardEngine = {
     return { ...session, guestPlayerId };
   },
 
-  getDuelCard(session) {
-    const cardLimit = session.tier === 'unlocked'
-      ? TIER_CONFIG.unlocked.monthlyCap
-      : session.tier === 'tier_30_day'
-        ? TIER_CONFIG.tier_30_day.baseWeeklyCards + TIER_CONFIG.tier_30_day.videoBonusCards
-        : TIER_CONFIG.free.maxCardsPerWeek;
-    if (session.roundIndex >= cardLimit) {
-      throw new Error('This session has reached its card limit.');
-    }
-    return this.getCard(session.roundIndex, session.tier);
-  },
-
   getDuelState(session, playerId) {
     const role = playerId === session.hostPlayerId
       ? 'host'
@@ -236,69 +286,55 @@ const G2KUCardEngine = {
     }
 
     const paired = Boolean(session.guestPlayerId);
-    const answerCount = Object.keys(session.answers).length;
-    const answersRevealed = paired && answerCount === 2;
+    const isHost = role === 'host';
+    const myCompleted = isHost ? session.hostCompleted : session.guestCompleted;
+    const partnerCompleted = isHost ? session.guestCompleted : session.hostCompleted;
+
+    let status = 'in_progress';
+    if (!paired) {
+      status = 'waiting_for_partner';
+    } else if (!myCompleted) {
+      status = 'answering';
+    } else if (!partnerCompleted) {
+      status = 'waiting_for_partner_completion';
+    } else {
+      status = 'session_complete';
+    }
+
+    let revealedData = null;
+    if (status === 'session_complete' || (!isHost && myCompleted)) {
+      revealedData = {
+        hostAnswers: session.hostAnswers,
+        guestAnswers: session.guestAnswers
+      };
+    }
+
     return {
       roomCode: session.roomCode,
       tier: session.tier,
       role,
-      status: !paired
-        ? 'waiting_for_partner'
-        : answersRevealed
-          ? 'answers_revealed'
-          : 'waiting_for_answers',
-      roundIndex: session.roundIndex,
-      hasSubmitted: Object.prototype.hasOwnProperty.call(session.answers, playerId),
-      answerCount,
-      revealedAnswers: answersRevealed
-        ? [
-            { role: 'host', answer: session.answers[session.hostPlayerId] },
-            { role: 'guest', answer: session.answers[session.guestPlayerId] }
-          ]
-        : null
+      status,
+      myCompleted,
+      partnerCompleted,
+      revealedData
     };
   },
 
-  submitDuelAnswer(session, playerId, answer) {
+  submitDuelSessionAnswers(session, playerId, answersMap) {
     if (!session.guestPlayerId) {
-      throw new Error('Wait for your partner to join before answering.');
+      throw new Error('Wait for your partner to join before finishing.');
     }
     if (playerId !== session.hostPlayerId && playerId !== session.guestPlayerId) {
       throw new Error('This player is not part of the duel.');
     }
-    if (typeof answer !== 'string' || !answer.trim() || answer.length > 1000) {
-      throw new Error('Answers must contain 1 to 1000 characters.');
-    }
-    if (Object.prototype.hasOwnProperty.call(session.answers, playerId)) {
-      throw new Error('This player has already answered this card.');
-    }
 
+    const isHost = playerId === session.hostPlayerId;
     return {
       ...session,
-      answers: { ...session.answers, [playerId]: answer.trim() }
+      hostAnswers: isHost ? answersMap : session.hostAnswers,
+      guestAnswers: !isHost ? answersMap : session.guestAnswers,
+      hostCompleted: isHost ? true : session.hostCompleted,
+      guestCompleted: !isHost ? true : session.guestCompleted
     };
-  },
-
-  advanceDuelRound(session, playerId) {
-    if (playerId !== session.hostPlayerId) {
-      throw new Error('Only the host can advance to the next card.');
-    }
-    if (!session.guestPlayerId) {
-      throw new Error('Wait for your partner to join before continuing.');
-    }
-    if (Object.keys(session.answers).length !== 2) {
-      throw new Error('Both players must answer before continuing.');
-    }
-    const nextRound = session.roundIndex + 1;
-    const nextCardLimit = session.tier === 'unlocked'
-      ? TIER_CONFIG.unlocked.monthlyCap
-      : session.tier === 'tier_30_day'
-        ? TIER_CONFIG.tier_30_day.baseWeeklyCards + TIER_CONFIG.tier_30_day.videoBonusCards
-        : TIER_CONFIG.free.maxCardsPerWeek;
-    if (nextRound >= nextCardLimit) {
-      throw new Error('This session has reached its card limit.');
-    }
-
-    return { ...session, roundIndex: nextRound, answers: {} };
   }
 };

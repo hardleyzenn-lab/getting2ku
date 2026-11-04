@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>G2KU - Game Arena</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <main class="arena-view" id="arenaView">
+        <div class="arena-wrapper">
+            
+            <!-- Dynamic Alert Pill -->
+            <aside id="pendingChallengeBanner" class="challenge-pill" style="display: none;">
+                <div class="pill-info">
+                    <span class="pulse-dot"></span>
+                    <span class="pill-icon">🎮</span>
+                    <div>
+                        <strong id="bannerTitle">New Challenge!</strong>
+                        <p id="bannerSub">Your partner is waiting.</p>
+                    </div>
+                </div>
+                <button class="btn-glow" onclick="acceptPendingGame()">Accept</button>
+            </aside>
+
+            <!-- Header -->
+            <header class="arena-hero">
+                <span class="tag">Versus Zone</span>
+                <h2>Game Arena</h2>
+                <p>Pick a game, talk trash, settle bets.</p>
+            </header>
+
+            <!-- Mini-Games Cards -->
+            <section class="games-layout">
+                
+                <!-- 1. Tic-Tac-Toe -->
+                <article class="interactive-card featured">
+                    <div class="card-top">
+                        <div class="icon-avatar">❌⭕</div>
+                        <div class="card-titles">
+                            <h3>Tic-Tac-Toe</h3>
+                            <span class="badge">Best of 5</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">First to 3 wins takes the crown. Quick rounds, zero excuses.</p>
+                    
+                    <!-- Segmented Action Tabs -->
+                    <div class="action-segment">
+                        <button type="button" class="tab-btn active" onclick="switchTttTab(this, 'create')">New Game</button>
+                        <button type="button" class="tab-btn" onclick="switchTttTab(this, 'join')">Join Code</button>
+                        <button type="button" class="tab-btn" onclick="switchTttTab(this, 'resume')">Resume</button>
+                    </div>
+
+                    <!-- Panel: Create -->
+                    <div id="tab-create" class="segment-panel show">
+                        <button class="btn-primary full-width" onclick="createTicTacToeRoom()">Host &amp; Send Invite</button>
+                        
+                        <div id="ttt-invite-panel" class="code-share-drawer" hidden>
+                            <label>Room Code</label>
+                            <div class="code-copy-row">
+                                <code id="ttt-invite-code" class="code-badge">--------</code>
+                                <button class="btn-icon" title="Copy Link" onclick="copyTicTacToeInvite()">📋</button>
+                                <button class="btn-icon" title="Share" onclick="shareTicTacToeInvite()">🔗</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Panel: Join -->
+                    <div id="tab-join" class="segment-panel">
+                        <div class="input-action-group">
+                            <input id="ttt-room-code" maxlength="8" autocomplete="off" placeholder="8-char code" aria-label="Room code">
+                            <button class="btn-primary" onclick="joinTicTacToeRoom()">Join</button>
+                        </div>
+                    </div>
+
+                    <!-- Panel: Resume -->
+                    <div id="tab-resume" class="segment-panel">
+                        <div class="input-action-group">
+                            <input id="ttt-session-id-input" autocomplete="off" placeholder="Paste session ID" aria-label="Session ID">
+                            <button class="btn-primary" onclick="resumeTicTacToeSeries()">Resume</button>
+                        </div>
+                    </div>
+
+                    <p id="ttt-page-status" class="status-indicator" role="status" aria-live="polite"></p>
+                </article>
+
+                <!-- 2. Connect Four -->
+                <article class="interactive-card">
+                    <div class="card-top">
+                        <div class="icon-avatar">🔴🟡</div>
+                        <div class="card-titles">
+                            <h3>Connect Four</h3>
+                            <span class="badge">Turn-Based</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Stack 4 before they notice what you're doing.</p>
+                    <button class="btn-primary full-width" onclick="initiateChallenge('connectfour')">Send Challenge</button>
+                </article>
+
+                <!-- 3. Memory Match -->
+                <article class="interactive-card">
+                    <div class="card-top">
+                        <div class="icon-avatar">🃏</div>
+                        <div class="card-titles">
+                            <h3>Memory Match</h3>
+                            <span class="badge">Solo / Async</span>
+                        </div>
+                    </div>
+                    <p class="card-desc">Card-flipping speed run against the clock.</p>
+                    <button class="btn-primary full-width" onclick="initiateChallenge('memorymatch')">Start Run</button>
+                </article>
+
+            </section>
+
+            <!-- Collapsible History -->
+            <details class="history-accordion">
+                <summary>
+                    <span>📜 Saved Game Series</span>
+                    <span class="arrow">▾</span>
+                </summary>
+                <div class="accordion-body">
+                    <p id="ttt-history-status" class="status-indicator" role="status" aria-live="polite">
+                        Join or create a room to view recent series.
+                    </p>
+                    <ul id="ttt-history-list" class="history-pill-list"></ul>
+                </div>
+            </details>
+
+            <!-- Gameplay Modal -->
+            <div id="gamePlayModal" class="game-modal" style="display: none;">
+                <div class="modal-card">
+                    <div class="modal-header">
+                        <span class="live-tag">LIVE MATCH</span>
+                        <button class="close-x" onclick="closeGameModal()" aria-label="Close modal">✕</button>
+                    </div>
+
+                    <div id="active-game-container"></div>
+
+                    <div id="ttt-session-controls" class="modal-tray" hidden>
+                        <div class="tray-pill">
+                            <span>Room: <strong id="ttt-modal-room-code"></strong></span>
+                            <button type="button" class="btn-text" onclick="copyTicTacToeRoomCode()">Copy</button>
+                            <a id="ttt-return-room-link" class="btn-text highlight" href="rooms.html">Lobby</a>
+                        </div>
+                        <details class="modal-reconnect">
+                            <summary>Reconnect info</summary>
+                            <div class="tray-pill mini">
+                                <strong id="ttt-modal-session-id"></strong>
+                                <button type="button" class="btn-text" onclick="copyTicTacToeSessionId()">Copy ID</button>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Tab Switching Helper -->
+    <script>
+        function switchTttTab(btn, tabId) {
+            btn.closest('.interactive-card').querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.closest('.interactive-card').querySelectorAll('.segment-panel').forEach(p => p.classList.remove('show'));
+            btn.classList.add('active');
+            document.getElementById('tab-' + tabId).classList.add('show');
+        }
+    </script>
+
+    <script src="realtime-client.js"></script>
+    <script src="games-engine.js"></script>
+    <script src="app.js"></script>
+    <script src="site-layout.js"></script>
+</body>
+</html>

@@ -1,391 +1,1194 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Getting2KU - Room Entry</title>
-    <!-- Linked separate stylesheet -->
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Getting2KU | Rooms &amp; Cards</title>
+
+  <!-- External style.css stylesheet link -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Tailwind CSS & FontAwesome -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Google Fonts: Montserrat & Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,700;0,800;0,900;1,900&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            heading: ['Montserrat', 'sans-serif'],
+            body: ['Plus Jakarta Sans', 'sans-serif'],
+          },
+          colors: {
+            kh: {
+              purple: '#46178F',
+              darkPurple: '#25076B',
+              red: '#E21B3C',
+              blue: '#1368CE',
+              yellow: '#D89E00',
+              green: '#26890C',
+              redHover: '#C21330',
+              blueHover: '#0F52A5',
+              yellowHover: '#B28200',
+              greenHover: '#1E6D09'
+            }
+          },
+          boxShadow: {
+            'block': '0 6px 0 0 rgba(0, 0, 0, 0.25)',
+            'card': '0 8px 24px rgba(0,0,0,0.3)'
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background: radial-gradient(circle at 50% 30%, #46178F 0%, #25076B 100%);
+      font-family: 'Montserrat', sans-serif;
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    .kh-btn {
+      transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+      box-shadow: 0 6px 0 0 rgba(0, 0, 0, 0.3);
+    }
+    .kh-btn:active {
+      transform: translateY(4px);
+      box-shadow: 0 2px 0 0 rgba(0, 0, 0, 0.3);
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { filter: drop-shadow(0 0 15px rgba(255,255,255,0.4)); }
+      50% { filter: drop-shadow(0 0 30px rgba(255,255,255,0.8)); }
+    }
+    .pulse-glow {
+      animation: pulseGlow 2s infinite;
+    }
+  </style>
 </head>
-<body>
+<body class="min-h-screen text-white flex flex-col justify-between overflow-x-hidden antialiased">
 
-    <!-- ROOM ENTRY & PAIRING MODULE -->
-    <main class="room-setup-box" id="roomLobby">
-        <h2 class="room-title">Join or Host a Space</h2>
-        <p class="room-subtitle">Pick an active session or start a fresh connection.</p>
-        <p id="room-account-status" class="room-subtitle" role="status" aria-live="polite">Checking account status…</p>
+  <!-- TOP GAME BAR -->
+  <header class="w-full bg-kh-darkPurple/80 backdrop-blur-md border-b border-white/10 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
+    <div class="flex items-center gap-3">
+      <div class="bg-white text-kh-purple font-black text-xl px-3 py-1 rounded-lg tracking-tighter shadow-md">
+        g2ku
+      </div>
+      <span class="hidden sm:inline-block font-bold text-xs uppercase tracking-widest text-white/70">
+        Rooms &amp; Cards
+      </span>
+    </div>
 
-        <!-- 1. Active Spaces Started (History List) -->
-        <div class="active-spaces-container">
-            <h3 class="section-label">Active Spaces</h3>
-            <ul id="active-spaces-list" class="spaces-list"></ul>
+    <!-- SESSION CODE DISPLAY -->
+    <div class="bg-black/40 border border-white/20 rounded-xl px-4 py-1.5 flex items-center gap-2">
+      <span class="text-[10px] text-white/60 font-bold uppercase tracking-wider">SESSION CODE:</span>
+      <span id="session-code" class="font-black text-lg text-yellow-300 tracking-wider">--------</span>
+    </div>
+
+    <div class="text-xs font-black text-white/70 bg-white/10 px-3 py-1.5 rounded-xl border border-white/10">
+      CARD <span id="header-q-num" class="text-yellow-300">0</span>/<span id="header-q-limit">5</span>
+    </div>
+  </header>
+
+  <div id="tictactoe-room-entry" class="hidden mx-auto mt-4 w-[calc(100%-2rem)] max-w-4xl text-right">
+    <a id="tictactoe-room-entry-link" class="inline-block rounded-xl bg-kh-green px-4 py-2 font-black text-white shadow-block" href="game.html">
+      Play Tic-Tac-Toe with this room
+    </a>
+  </div>
+
+  <section id="tictactoe-challenge-banner" class="hidden mx-auto mt-4 w-[calc(100%-2rem)] max-w-4xl rounded-2xl border border-yellow-200/30 bg-kh-darkPurple/90 px-5 py-4 text-white shadow-card" aria-live="polite">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <p class="font-black text-yellow-300">Tic-Tac-Toe Division Series</p>
+        <p id="tictactoe-challenge-message" class="text-sm font-bold"></p>
+      </div>
+      <a id="tictactoe-challenge-link" class="rounded-xl bg-yellow-300 px-4 py-2 font-black text-kh-darkPurple" href="game.html">Open game</a>
+    </div>
+  </section>
+
+  <!-- MAIN APP VIEWS -->
+  <main class="flex-1 w-full max-w-4xl mx-auto px-4 py-4 flex flex-col justify-between relative">
+
+    <!-- 1. START / LOBBY VIEW -->
+    <section id="view-lobby" class="flex-1 flex flex-col items-center justify-center text-center my-auto py-8">
+      <div class="bg-white/10 border border-white/20 p-8 rounded-3xl max-w-md w-full backdrop-blur-lg shadow-card">
+        <div class="w-20 h-20 bg-yellow-400 text-kh-darkPurple font-black text-3xl rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg pulse-glow rotate-3">
+          g2
         </div>
+        <h1 class="text-3xl sm:text-4xl font-black tracking-tight mb-2 uppercase">G2KU Cards</h1>
+        <p class="text-sm text-white/80 font-body mb-6 font-semibold">Create a room and invite someone. The host answers first, then your partner answers the same cards.</p>
 
-        <!-- 2. Option A: Join with Existing Code -->
-        <div class="join-section">
-            <input type="text" id="space-code-input" class="code-input-field" placeholder="ENTER ROOM ID (E.G. SPACE-1234)">
-            <button class="btn-join" onclick="handleJoinWithCode()">I'm Joining. I Have a Code.</button>
+        <div class="mb-4 text-left">
+          <label for="new-room-name" class="block text-xs font-black uppercase tracking-wider text-white/75 mb-2">Your private room name</label>
+          <div class="room-name-entry">
+            <input id="new-room-name" maxlength="100" autocomplete="off" class="w-full rounded-xl px-3 py-3 text-kh-darkPurple font-bold" placeholder="Room name (defaults to Room #code)" style="user-select: text;">
+            <button type="button" class="history-save-btn" onclick="saveRoomName('new-room-name')">Save name</button>
+          </div>
+          <p id="new-room-nameStatus" class="room-name-status" role="status" aria-live="polite"></p>
         </div>
-
-        <div class="divider">— OR —</div>
-
-        <!-- 3. Option B: Generate New Code & Invite -->
-        <div class="generate-section">
-            <button class="btn-generate" onclick="handleGenerateAndInvite()">Generate New Code and Invite</button>
-            
-            <!-- Native Share / Copy Fallback Area -->
-            <div id="invite-share-container" class="share-banner" style="display: none;">
-                <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px;">Generated Code: <strong id="display-new-code" style="color: var(--text-light); font-size: 1rem;"></strong></p>
-                <button class="btn-copy" onclick="copyInviteLink()">📋 Copy Invite Link</button>
-            </div>
+        <button id="start-btn" class="w-full py-4 bg-kh-green hover:bg-kh-greenHover text-white font-black text-xl rounded-2xl kh-btn flex items-center justify-center gap-3 uppercase tracking-wider">
+          <i class="fa-solid fa-play"></i> Create a Room
+        </button>
+        <div class="mt-6 border-t border-white/20 pt-5">
+          <label for="space-code-input" class="block text-left text-xs font-black uppercase tracking-wider text-white/75 mb-2">Join with a room code</label>
+          <div class="flex gap-2">
+            <input id="space-code-input" maxlength="8" autocomplete="off" class="min-w-0 flex-1 rounded-xl px-3 py-3 text-center font-black uppercase tracking-widest text-kh-darkPurple" placeholder="8-CHARACTER CODE">
+            <button id="join-room-btn" type="button" class="py-3 px-4 bg-kh-blue hover:bg-kh-blueHover text-white font-black rounded-xl kh-btn">Join</button>
+          </div>
         </div>
-
-        <p id="room-entry-status" class="room-subtitle" role="status" aria-live="polite"></p>
-        <p id="room-pairing-result" class="room-subtitle" role="status" aria-live="polite"></p>
-    </main>
-
-    <main class="arena-container" id="sharedCardRoom" style="display: none;">
-        <div class="room-setup-box">
-            <div class="brand-badge">Shared Room</div>
-            <h1 class="room-title" id="sharedRoomTitle">Connection Cards</h1>
-            <p class="room-subtitle" id="sharedRoomProgress"></p>
-            <p class="room-subtitle" id="sharedRoomStatus" role="status" aria-live="polite"></p>
-            <div class="host-question-banner" id="sharedRoomPrompt"></div>
-            <div class="kahoot-response-grid" id="sharedRoomOptions"></div>
-            <div id="sharedRoomAnswers" class="spaces-list" style="margin-top: 1rem;"></div>
-            <section id="privateVibeCheck" class="join-section" style="display: none; margin-top: 1rem;">
-                <h2 class="room-title">Private Vibe Check</h2>
-                <p class="room-subtitle">Only you can see your choice. It will be saved to your account history.</p>
-                <div id="privateVibeChoices" class="join-section"></div>
-            </section>
-            <div class="generate-section" style="margin-top: 1rem;">
-                <button id="advanceSharedRoom" class="btn-generate" style="display: none;">Next card</button>
-                <a class="btn-resume" href="me%26u.html">Back to Me &amp; U</a>
-            </div>
+        <p id="room-account-status" class="text-xs text-white/75 mt-4" role="status" aria-live="polite">Checking account status…</p>
+        <p id="room-entry-status" class="text-sm text-white font-bold mt-2" role="status" aria-live="polite"></p>
+        <p id="room-pairing-result" class="text-sm text-yellow-200 font-bold mt-2" role="status" aria-live="polite"></p>
+        <div id="invite-share-container" class="hidden mt-3 rounded-xl bg-black/25 p-3">
+          <p class="text-xs uppercase font-bold tracking-wider text-white/70">Share this room code</p>
+          <p id="display-new-code" class="text-2xl font-black tracking-widest text-yellow-300"></p>
+          <div class="mt-2 flex flex-wrap gap-3">
+            <button id="share-invite-btn" type="button" class="text-sm font-bold text-white underline">Share invite link</button>
+            <button id="copy-invite-btn" type="button" class="text-sm font-bold text-white underline">Copy invite link</button>
+          </div>
         </div>
-    </main>
+        <div class="mt-6 text-left">
+          <h2 class="text-xs font-black uppercase tracking-widest text-white/70">Recent rooms</h2>
+          <ul id="active-spaces-list" class="mt-2 space-y-2"></ul>
+        </div>
+      </div>
+    </section>
 
-    <!-- ROOM ENTRY JAVASCRIPT LOGIC -->
-    <script src="realtime-client.js"></script>
-    <script src="cards.js"></script>
-    <script>
-        let activeSpaceCode = '';
-        let currentRoomState = null;
-        const statusElement = document.getElementById('room-entry-status');
+    <section id="view-waiting" class="hidden flex-1 flex flex-col items-center justify-center text-center my-auto py-8">
+      <div class="bg-white/10 border border-white/20 p-8 rounded-3xl max-w-xl w-full backdrop-blur-lg shadow-card">
+        <div class="w-16 h-16 bg-yellow-400 text-kh-darkPurple font-black text-3xl rounded-2xl flex items-center justify-center mx-auto mb-5 pulse-glow">g2</div>
+        <h1 class="text-2xl sm:text-3xl font-black uppercase mb-3">You’re in the right place</h1>
+        <p id="waiting-room-message" class="text-sm sm:text-base text-white/85 font-semibold leading-relaxed" role="status" aria-live="polite"></p>
+        <p id="waiting-room-code" class="mt-5 text-xs font-black uppercase tracking-widest text-yellow-300"></p>
+        <div class="room-name-control">
+          <label for="roomNameWaitingInput">Your private room name</label>
+          <div>
+            <input id="roomNameWaitingInput" maxlength="100" autocomplete="off" style="user-select: text;">
+            <button type="button" class="history-save-btn" onclick="saveRoomName('roomNameWaitingInput')">Save name</button>
+          </div>
+          <p id="roomNameWaitingInputStatus" class="room-name-status" role="status" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
 
-        function setStatus(message) {
-            statusElement.textContent = message;
+    <!-- 2. GAMEPLAY VIEW (CARDS 1-5) -->
+    <section id="view-gameplay" class="hidden flex-1 flex flex-col justify-between">
+      <h1 id="sharedRoomTitle" class="text-xl font-black text-center uppercase tracking-wide"></h1>
+      <div class="room-name-control">
+        <label for="roomNameInput">Your private room name</label>
+        <div>
+          <input id="roomNameInput" maxlength="100" autocomplete="off" style="user-select: text;">
+          <button type="button" class="history-save-btn" onclick="saveRoomName('roomNameInput')">Save name</button>
+        </div>
+        <p id="roomNameInputStatus" class="room-name-status" role="status" aria-live="polite"></p>
+      </div>
+      <p id="sharedRoomProgress" class="text-center text-xs font-bold text-white/70"></p>
+
+      <!-- TOP COUNTER -->
+      <div class="flex items-center justify-between mb-3">
+        <div class="bg-black/30 px-4 py-1.5 rounded-full text-xs font-black text-white/90 border border-white/10 tracking-wide">
+          QUESTION <span id="q-current" class="text-yellow-300">1</span> OF <span id="q-limit">5</span>
+        </div>
+        <div id="card-category-badge" class="bg-white/10 px-3 py-1 rounded-full text-xs font-bold text-white/80 border border-white/10">
+          Loading category…
+        </div>
+      </div>
+
+      <!-- MAIN QUESTION CARD -->
+      <div class="bg-white text-gray-900 rounded-3xl p-6 sm:p-8 shadow-card text-center min-h-[160px] sm:min-h-[200px] flex flex-col justify-center items-center relative border-4 border-white/40 my-auto">
+        <h2 id="question-title" class="text-xl sm:text-2xl md:text-3xl font-black leading-tight text-kh-darkPurple tracking-tight">
+          Loading question...
+        </h2>
+      </div>
+      <p id="sharedRoomStatus" class="mt-3 text-center text-sm font-bold text-white/85" role="status" aria-live="polite"></p>
+      <button id="back-question-btn" type="button" class="hidden mt-4 w-full py-3 bg-white/15 hover:bg-white/25 text-white font-black rounded-xl">
+        Back to Previous Card
+      </button>
+
+      <!--  RESPONSE GRID (4 COLORED SHAPES) -->
+      <div id="answers-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
+
+        <!-- RED TRIANGLE -->
+        <button data-option="0" class="ans-btn kh-btn bg-kh-red hover:bg-kh-redHover p-4 sm:p-5 rounded-2xl flex items-center gap-4 text-left group">
+          <div class="w-10 h-10 sm:w-12 sm:h-12 bg-black/20 rounded-xl flex items-center justify-center shrink-0">
+            <svg class="w-6 h-6 sm:w-7 sm:h-7 fill-white" viewBox="0 0 24 24"><polygon points="12,2 22,21 2,21"/></svg>
+          </div>
+          <span class="text-base sm:text-lg font-black leading-tight flex-1 text-white antialiased text-option-0">Option 1</span>
+        </button>
+
+        <!-- BLUE DIAMOND -->
+        <button data-option="1" class="ans-btn kh-btn bg-kh-blue hover:bg-kh-blueHover p-4 sm:p-5 rounded-2xl flex items-center gap-4 text-left group">
+          <div class="w-10 h-10 sm:w-12 sm:h-12 bg-black/20 rounded-xl flex items-center justify-center shrink-0">
+            <svg class="w-6 h-6 sm:w-7 sm:h-7 fill-white" viewBox="0 0 24 24"><polygon points="12,2 22,12 12,22 2,12"/></svg>
+          </div>
+          <span class="text-base sm:text-lg font-black leading-tight flex-1 text-white antialiased text-option-1">Option 2</span>
+        </button>
+
+        <!-- YELLOW CIRCLE -->
+        <button data-option="2" class="ans-btn kh-btn bg-kh-yellow hover:bg-kh-yellowHover p-4 sm:p-5 rounded-2xl flex items-center gap-4 text-left group">
+          <div class="w-10 h-10 sm:w-12 sm:h-12 bg-black/20 rounded-xl flex items-center justify-center shrink-0">
+            <svg class="w-6 h-6 sm:w-7 sm:h-7 fill-white" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>
+          </div>
+          <span class="text-base sm:text-lg font-black leading-tight flex-1 text-white antialiased text-option-2">Option 3</span>
+        </button>
+
+        <!-- GREEN SQUARE -->
+        <button data-option="3" class="ans-btn kh-btn bg-kh-green hover:bg-kh-greenHover p-4 sm:p-5 rounded-2xl flex items-center gap-4 text-left group">
+          <div class="w-10 h-10 sm:w-12 sm:h-12 bg-black/20 rounded-xl flex items-center justify-center shrink-0">
+            <svg class="w-6 h-6 sm:w-7 sm:h-7 fill-white" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+          </div>
+          <span class="text-base sm:text-lg font-black leading-tight flex-1 text-white antialiased text-option-3">Option 4</span>
+        </button>
+
+      </div>
+      <button id="next-card-btn" type="button" class="hidden mt-5 w-full py-4 bg-kh-blue hover:bg-kh-blueHover text-white font-black text-lg rounded-2xl kh-btn uppercase tracking-wider">
+        Next Card
+      </button>
+    </section>
+
+    <!-- 3. RESPONSE FEEDBACK / REVEAL VIEW -->
+    <section id="view-reveal" class="hidden flex-1 flex flex-col items-center justify-center text-center my-auto py-6">
+      <div class="bg-white text-gray-900 border-4 border-white/50 p-8 rounded-3xl max-w-md w-full shadow-card">
+        <div class="w-16 h-16 bg-kh-purple text-yellow-300 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl shadow-lg rotate-3">
+          <i class="fa-solid fa-comment-dots"></i>
+        </div>
+        <p id="sharedRoomRevealProgress" class="text-xs font-bold text-gray-500 mb-2"></p>
+        <h2 id="sharedRoomRevealTitle" class="text-2xl font-black uppercase mb-1 text-kh-darkPurple">Answers Shared</h2>
+        <div class="room-name-control room-name-control-light">
+          <label for="roomNameRevealInput">Your private room name</label>
+          <div>
+            <input id="roomNameRevealInput" maxlength="100" autocomplete="off" style="user-select: text;">
+            <button type="button" class="history-save-btn" onclick="saveRoomName('roomNameRevealInput')">Save name</button>
+          </div>
+          <p id="roomNameRevealInputStatus" class="room-name-status" role="status" aria-live="polite"></p>
+        </div>
+        <p id="revealed-question" class="text-sm font-bold text-gray-700 mb-4"></p>
+        <p id="revealRoomStatus" class="text-sm font-bold text-gray-600 mb-3" role="status" aria-live="polite"></p>
+        <p id="picked-choice-text" class="text-sm font-bold text-gray-600 mb-4"></p>
+        <div id="sharedRoomAnswers" class="space-y-2 text-left"></div>
+        <p id="reveal-vibe-take" class="text-sm font-bold text-gray-600 mt-4" role="status" aria-live="polite"></p>
+        <button id="back-reveal-btn" type="button" class="hidden w-full mt-3 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 font-black rounded-xl">Back to Previous Card</button>
+        <button id="advanceSharedRoom" type="button" class="hidden w-full mt-5 py-4 bg-kh-blue hover:bg-kh-blueHover text-white font-black text-lg rounded-2xl kh-btn uppercase tracking-wider">Next Card</button>
+      </div>
+    </section>
+
+    <section id="view-complete" class="hidden flex-1 flex flex-col items-center justify-center text-center my-auto py-6">
+      <div class="bg-white text-gray-900 p-8 rounded-3xl max-w-3xl w-full shadow-card">
+        <h1 class="text-3xl font-black uppercase mb-3 text-kh-darkPurple">Room complete!</h1>
+        <p id="completion-status" class="text-sm font-bold text-gray-600"></p>
+        <button id="resume-session-btn" type="button" class="hidden w-full mt-4 py-3 bg-kh-green hover:bg-kh-greenHover text-white font-black rounded-xl kh-btn">
+          Resume session for more cards
+        </button>
+        <div id="free-ad-option" class="hidden mt-4 rounded-xl border border-gray-200 bg-gray-50 p-3">
+          <div id="ad-video-player" class="hidden mb-3 w-full overflow-hidden rounded-xl bg-black"></div>
+          <button id="start-ad-video-btn" type="button"
+                  class="w-full rounded-xl bg-kh-blue px-4 py-3 font-black text-white">
+            Watch the video for 5 more cards
+          </button>
+          <button id="claim-ad-reward-btn" type="button"
+                  disabled
+                  class="mt-2 w-full cursor-not-allowed rounded-xl bg-gray-300 px-4 py-3 font-black text-gray-600">
+            Finish the video to unlock 5 cards
+          </button>
+          <p id="ad-reward-status" class="mt-2 text-xs font-bold text-gray-500">
+            Watch the entire video here at normal speed to unlock the reward. You can earn up to 15 added cards per seven-day period.
+          </p>
+        </div>
+        <div class="room-name-control room-name-control-light">
+          <label for="roomNameCompleteInput">Your private room name</label>
+          <div>
+            <input id="roomNameCompleteInput" maxlength="100" autocomplete="off" style="user-select: text;">
+            <button type="button" class="history-save-btn" onclick="saveRoomName('roomNameCompleteInput')">Save name</button>
+          </div>
+          <p id="roomNameCompleteInputStatus" class="room-name-status" role="status" aria-live="polite"></p>
+        </div>
+        <a href="me%26u.html" class="block mt-5 py-3 bg-kh-blue hover:bg-kh-blueHover text-white font-black rounded-xl">View Me &amp; U history</a>
+        <a href="rooms.html" class="block mt-3 text-sm font-bold text-kh-blue underline">Start or join another room</a>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="realtime-client.js"></script>
+  <script src="cards.js"></script>
+  <script>
+    let activeRoomCode = '';
+    let roomNameCode = '';
+    let currentRoomState = null;
+    let revisingRoomAnswer = false;
+    let localSessionAnswers = [];
+    let reviewingSession = false;
+    let youtubeIframeApiPromise = null;
+    let adVideoPlayer = null;
+    let adWatchInterval = null;
+    let adRewardRoomCode = '';
+    let adRewardDurationSeconds = 0;
+    let adRewardWatchedSeconds = 0;
+    let adRewardServerStarted = false;
+    let adRewardStartPending = false;
+    let adRewardCompleted = false;
+    let adLastVideoSample = null;
+    const views = ['view-lobby', 'view-waiting', 'view-gameplay', 'view-reveal', 'view-complete']
+      .map(id => document.getElementById(id));
+    const roomStatus = document.getElementById('room-entry-status');
+
+    function setRoomStatus(message) {
+      roomStatus.textContent = message;
+    }
+
+    function resetAdRewardWatch() {
+      clearInterval(adWatchInterval);
+      adWatchInterval = null;
+      if (adVideoPlayer) adVideoPlayer.destroy();
+      adVideoPlayer = null;
+      adRewardDurationSeconds = 0;
+      adRewardWatchedSeconds = 0;
+      adRewardServerStarted = false;
+      adRewardStartPending = false;
+      adRewardCompleted = false;
+      adLastVideoSample = null;
+      document.getElementById('ad-video-player').replaceChildren();
+      document.getElementById('ad-video-player').classList.add('hidden');
+      const claimButton = document.getElementById('claim-ad-reward-btn');
+      claimButton.disabled = true;
+      claimButton.className =
+        'mt-2 w-full cursor-not-allowed rounded-xl bg-gray-300 px-4 py-3 font-black text-gray-600';
+      const bonusCards = currentRoomState?.cardLimit
+        ? Math.min(5, 50 - currentRoomState.cardLimit)
+        : 5;
+      claimButton.textContent =
+        `Finish the video to unlock ${bonusCards} card${bonusCards === 1 ? '' : 's'}`;
+    }
+
+    function loadYouTubeIframeApi() {
+      if (window.YT?.Player) return Promise.resolve();
+      if (youtubeIframeApiPromise) return youtubeIframeApiPromise;
+      youtubeIframeApiPromise = new Promise((resolve, reject) => {
+        const previousCallback = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = () => {
+          if (typeof previousCallback === 'function') previousCallback();
+          resolve();
+        };
+        const script = document.createElement('script');
+        script.src = 'https://www.youtube.com/iframe_api';
+        script.onerror = () => {
+          youtubeIframeApiPromise = null;
+          reject(new Error('Could not load the YouTube player.'));
+        };
+        document.head.appendChild(script);
+      });
+      return youtubeIframeApiPromise;
+    }
+
+    function updateAdWatchStatus(message) {
+      const progress = adRewardDurationSeconds
+        ? `Watched ${Math.min(adRewardWatchedSeconds, adRewardDurationSeconds).toFixed(0)} / ` +
+          `${adRewardDurationSeconds} seconds.`
+        : '';
+      document.getElementById('ad-reward-status').textContent = message || progress;
+    }
+
+    async function startAdRewardTimer() {
+      if (adRewardServerStarted || adRewardStartPending || !adRewardDurationSeconds) return;
+      if (adRewardDurationSeconds > 1800) {
+        document.getElementById('ad-reward-status').textContent =
+          'This video duration is not supported for a reward.';
+        return;
+      }
+      adRewardStartPending = true;
+      try {
+        const result = await G2KURoomClient.request('start_ad_reward', {
+          durationSeconds: adRewardDurationSeconds
+        });
+        adRewardDurationSeconds = result.durationSeconds;
+        adRewardServerStarted = true;
+        document.getElementById('ad-reward-status').textContent =
+          `Watch the entire ${adRewardDurationSeconds}-second video at normal speed.`;
+        beginAdWatchTracking();
+      } catch (error) {
+        console.error('Unable to start the ad reward timer:', error);
+        document.getElementById('ad-reward-status').textContent =
+          `Could not start the reward timer: ${error.message}`;
+        document.getElementById('start-ad-video-btn').disabled = false;
+      } finally {
+        adRewardStartPending = false;
+      }
+    }
+
+    function beginAdWatchTracking() {
+      if (adWatchInterval) return;
+      adWatchInterval = setInterval(() => {
+        if (!adVideoPlayer || !adRewardServerStarted ||
+            document.visibilityState !== 'visible' ||
+            adVideoPlayer.getPlayerState() !== YT.PlayerState.PLAYING) {
+          adLastVideoSample = null;
+          return;
         }
 
-        function rememberSpace(code) {
-            const history = JSON.parse(localStorage.getItem('g2ku_active_spaces') || '[]');
-            if (!history.includes(code)) {
-                history.unshift(code);
-                localStorage.setItem('g2ku_active_spaces', JSON.stringify(history.slice(0, 10)));
-            }
-            renderActiveSpaces();
+        const now = performance.now();
+        const videoTime = adVideoPlayer.getCurrentTime();
+        if (adLastVideoSample) {
+          const elapsed = (now - adLastVideoSample.wallTime) / 1000;
+          const advanced = videoTime - adLastVideoSample.videoTime;
+          if (advanced < 0 || advanced > elapsed * 1.5 + 0.5) {
+            adRewardWatchedSeconds = 0;
+            updateAdWatchStatus('Skipping detected. Rewatch the full video without seeking.');
+          } else if (advanced >= Math.max(0.1, elapsed * 0.25)) {
+            adRewardWatchedSeconds += elapsed;
+            updateAdWatchStatus();
+          }
         }
+        adLastVideoSample = { wallTime: now, videoTime };
+      }, 500);
+    }
 
-        function showRoomState(state) {
-            currentRoomState = state;
-            if (state.status === 'paired') {
-                document.getElementById('roomLobby').style.display = 'none';
-                document.getElementById('sharedCardRoom').style.display = 'block';
-                renderSharedRoomCard(state).catch(error => {
-                    console.error('Unable to render the shared room card:', error);
-                    document.getElementById('sharedRoomStatus').textContent = error.message;
-                });
+    async function startAdVideo() {
+      const startButton = document.getElementById('start-ad-video-btn');
+      const status = document.getElementById('ad-reward-status');
+      resetAdRewardWatch();
+      startButton.disabled = true;
+      status.textContent = 'Loading the video player…';
+      try {
+        await connectToRoomService();
+        await loadYouTubeIframeApi();
+        const playerContainer = document.getElementById('ad-video-player');
+        playerContainer.classList.remove('hidden');
+        const playerMount = document.createElement('div');
+        playerMount.id = 'youtube-ad-player';
+        playerContainer.replaceChildren(playerMount);
+        adVideoPlayer = new YT.Player(playerMount, {
+          videoId: '_6ZcusIwNmo',
+          playerVars: { autoplay: 1, controls: 1, disablekb: 1, playsinline: 1, rel: 0 },
+          events: {
+            onReady: event => {
+              adRewardDurationSeconds = Math.ceil(event.target.getDuration());
+              if (!adRewardDurationSeconds || adRewardDurationSeconds > 1800) {
+                status.textContent = 'This video duration is not supported for a reward.';
+                startButton.disabled = false;
                 return;
-            }
-            document.getElementById('roomLobby').style.display = 'block';
-            document.getElementById('sharedCardRoom').style.display = 'none';
-            if (state.status === 'completed') {
-                document.getElementById('roomLobby').style.display = 'none';
-                document.getElementById('sharedCardRoom').style.display = 'block';
-                showCompletedRoom(state);
-                return;
-            }
-            document.getElementById('room-pairing-result').textContent = `Room ${state.roomCode} is waiting for your partner.`;
-            setStatus(`Room ${state.roomCode} is waiting for your partner.`);
-        }
-
-        function handleRoomMessage(message) {
-            if (message.type !== 'room_state' || message.state.roomCode !== activeSpaceCode) return;
-            showRoomState(message.state);
-        }
-
-        function createRoomButton(label, handler, className = 'kahoot-block block-blue') {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = className;
-            button.textContent = label;
-            button.addEventListener('click', handler);
-            return button;
-        }
-
-        async function renderSharedRoomCard(state) {
-            await G2KUCardEngine.ready;
-            const card = G2KUCardEngine.getCard(state.roundIndex, state.tier);
-            const progress = document.getElementById('sharedRoomProgress');
-            const status = document.getElementById('sharedRoomStatus');
-            const prompt = document.getElementById('sharedRoomPrompt');
-            const options = document.getElementById('sharedRoomOptions');
-            const answers = document.getElementById('sharedRoomAnswers');
-            const vibeSection = document.getElementById('privateVibeCheck');
-            const vibeChoices = document.getElementById('privateVibeChoices');
-            const advanceButton = document.getElementById('advanceSharedRoom');
-            const checkpoint = (state.roundIndex + 1) % 5 === 0 ||
-                state.roundIndex + 1 === state.cardLimit;
-
-            progress.textContent =
-                `Room ${state.roomCode} · Card ${state.roundIndex + 1} of ${state.cardLimit} · ${state.tier.replaceAll('_', ' ')} pass`;
-            prompt.textContent = card.prompt;
-            options.replaceChildren();
-            answers.replaceChildren();
-            vibeChoices.replaceChildren();
-            vibeSection.style.display = 'none';
-            advanceButton.style.display = 'none';
-            document.getElementById('sharedRoomTitle').textContent =
-                `${state.playerName || state.role} & ${state.partnerName || 'Partner'}`;
-
-            if (state.revealedAnswers) {
-                status.textContent = 'Both players answered. Your answers are now shared.';
-                for (const entry of state.revealedAnswers) {
-                    const item = document.createElement('p');
-                    item.className = 'space-item';
-                    item.textContent = `${entry.role === 'host' ? 'Host' : 'Guest'}: ${entry.answer}`;
-                    answers.appendChild(item);
-                }
-            } else if (state.hasSubmitted) {
-                status.textContent = 'Your answer is saved. Waiting for your partner to answer.';
-            } else {
-                status.textContent = 'Choose your answer. Your partner will not see it until both answer.';
-                const blockClasses = [
-                    'kahoot-block block-red',
-                    'kahoot-block block-blue',
-                    'kahoot-block block-yellow',
-                    'kahoot-block block-green'
-                ];
-                card.options.forEach((answer, index) => {
-                    options.appendChild(createRoomButton(answer, () => submitRoomAnswer(card, answer), blockClasses[index]));
-                });
-            }
-
-            if (checkpoint && state.revealedAnswers) {
-                vibeSection.style.display = 'block';
-                if (state.hasVibeCheck) {
-                    const saved = document.createElement('p');
-                    saved.className = 'room-subtitle';
-                    saved.textContent = 'Your private vibe check is saved.';
-                    vibeChoices.appendChild(saved);
-                } else if (state.isSignedIn) {
-                    for (const choice of ['Marry them ❤️', 'Ghost them 👻', 'Like & Subscribe 🔔']) {
-                        vibeChoices.appendChild(createRoomButton(choice, () => savePrivateVibeCheck(choice)));
-                    }
+              }
+              event.target.setPlaybackRate(1);
+              if (event.target.getPlayerState() === YT.PlayerState.PLAYING) {
+                startAdRewardTimer();
+              }
+            },
+            onStateChange: event => {
+              if (event.data === YT.PlayerState.PLAYING) {
+                adVideoPlayer.setPlaybackRate(1);
+                startAdRewardTimer();
+              } else if (event.data === YT.PlayerState.ENDED) {
+                if (adRewardWatchedSeconds >= adRewardDurationSeconds - 1) {
+                  adRewardCompleted = true;
+                  const claimButton = document.getElementById('claim-ad-reward-btn');
+                  claimButton.disabled = false;
+                  claimButton.className =
+                    'mt-2 w-full rounded-xl bg-kh-green px-4 py-3 font-black text-white';
+                  const bonusCards = Math.min(5, 50 - currentRoomState.cardLimit);
+                  claimButton.textContent =
+                    `Claim ${bonusCards} bonus card${bonusCards === 1 ? '' : 's'}`;
+                  updateAdWatchStatus('Video complete. You can now claim your bonus cards.');
                 } else {
-                    const note = document.createElement('p');
-                    note.className = 'room-subtitle';
-                    note.textContent = 'Sign in to save a private vibe check. You can continue without saving.';
-                    vibeChoices.appendChild(note);
+                  adRewardWatchedSeconds = 0;
+                  updateAdWatchStatus('The full video was not watched. Replaying it from the beginning.');
+                  adVideoPlayer.seekTo(0, true);
+                  adVideoPlayer.playVideo();
                 }
+              }
+            },
+            onPlaybackRateChange: event => {
+              if (event.data !== 1) adVideoPlayer.setPlaybackRate(1);
+            },
+            onError: event => {
+              status.textContent = `The video could not be played (YouTube error ${event.data}).`;
+              startButton.disabled = false;
             }
+          }
+        });
+      } catch (error) {
+        console.error('Unable to start the rewarded video:', error);
+        status.textContent = error.message;
+        startButton.disabled = false;
+      }
+    }
 
-            if (state.role === 'host' && state.revealedAnswers && state.roundIndex < state.cardLimit) {
-                advanceButton.style.display = 'block';
-                advanceButton.textContent = state.roundIndex + 1 === state.cardLimit
-                    ? 'Finish room'
-                    : 'Next card';
-                advanceButton.onclick = advanceSharedRoom;
-                advanceButton.disabled = checkpoint && state.isSignedIn && !state.hasVibeCheck;
-            } else if (state.role === 'guest' && state.revealedAnswers) {
-                status.textContent += ' The host will start the next card.';
-            }
+    function syncRoomNameFields(name) {
+      for (const id of [
+        'new-room-name',
+        'roomNameWaitingInput',
+        'roomNameInput',
+        'roomNameRevealInput',
+        'roomNameCompleteInput'
+      ]) {
+        document.getElementById(id).value = name;
+      }
+    }
+
+    async function saveRoomName(inputId) {
+      const input = document.getElementById(inputId);
+      const button = input.parentElement.querySelector('button');
+      const status = document.getElementById(`${inputId}Status`);
+      if (!activeRoomCode) {
+        status.textContent = 'Create or join a room before saving its private name.';
+        return;
+      }
+
+      button.disabled = true;
+      status.textContent = 'Saving…';
+      try {
+        const result = await requestPrivateRoomName(activeRoomCode, 'PATCH', input.value);
+        syncRoomNameFields(result.roomName);
+        status.textContent = 'Room name saved privately to your account.';
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function savePrivateRoomName(roomCode, roomName) {
+      try {
+        const result = await requestPrivateRoomName(roomCode, 'PATCH', roomName);
+        if (activeRoomCode === roomCode) syncRoomNameFields(result.roomName);
+        document.getElementById('new-room-nameStatus').textContent =
+          'Room name saved privately to your account.';
+      } catch (error) {
+        document.getElementById('new-room-nameStatus').textContent = error.message;
+      }
+    }
+
+    async function requestPrivateRoomName(roomCode, method, roomName) {
+      const options = { method, credentials: 'same-origin' };
+      if (method === 'PATCH') {
+        options.headers = { 'Content-Type': 'application/json' };
+        options.body = JSON.stringify({ roomName });
+      }
+      const response = await fetch(
+        `/api/auth/rooms/${encodeURIComponent(roomCode)}/name`,
+        options
+      );
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(response.status === 404
+          ? 'Private room names are unavailable on this server. Restart Getting2KU and reload.'
+          : `Could not load your private room name (HTTP ${response.status}).`);
+      }
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || `Room name request failed (HTTP ${response.status}).`);
+      }
+      return result;
+    }
+
+    async function loadPrivateRoomName(roomCode) {
+      try {
+        const result = await requestPrivateRoomName(roomCode, 'GET');
+        if (activeRoomCode === roomCode) syncRoomNameFields(result.roomName);
+      } catch (error) {
+        if (activeRoomCode === roomCode) {
+          document.getElementById('roomNameWaitingInputStatus').textContent = error.message;
+        }
+      }
+    }
+
+    function showView(viewId) {
+      for (const view of views) view.classList.add('hidden');
+      document.getElementById(viewId).classList.remove('hidden');
+    }
+
+    function rememberRoom(code) {
+      const recentCodes = JSON.parse(localStorage.getItem('g2ku_active_spaces') || '[]');
+      if (!recentCodes.includes(code)) {
+        recentCodes.unshift(code);
+        localStorage.setItem('g2ku_active_spaces', JSON.stringify(recentCodes.slice(0, 10)));
+      }
+      renderRecentRooms();
+    }
+
+    function renderRecentRooms() {
+      const list = document.getElementById('active-spaces-list');
+      list.replaceChildren();
+      const recentCodes = JSON.parse(localStorage.getItem('g2ku_active_spaces') || '[]');
+      for (const code of recentCodes) {
+        if (typeof code !== 'string' || !/^[A-HJ-NP-Z2-9]{8}$/.test(code)) continue;
+        const item = document.createElement('li');
+        item.className = 'flex items-center justify-between rounded-lg bg-white/10 px-3 py-2';
+        const label = document.createElement('span');
+        label.className = 'font-black tracking-widest text-yellow-200';
+        label.textContent = code;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'text-sm font-bold underline';
+        button.textContent = 'Resume';
+        button.addEventListener('click', () => resumeRoom(code));
+        item.append(label, button);
+        list.appendChild(item);
+      }
+    }
+
+    function handleRoomMessage(message) {
+      if (message.type === 'tictactoe_state') {
+        if (message.state.roomCode === activeRoomCode) showTicTacToeBanner(message.state);
+        return;
+      }
+      if (message.type !== 'room_state' || message.state.roomCode !== activeRoomCode) return;
+      if (reviewingSession && message.state.isMyTurn &&
+          message.state.roundIndex === localSessionAnswers[0]?.roundIndex) return;
+      showRoomState(message.state);
+    }
+
+    function showTicTacToeBanner(state) {
+      const banner = document.getElementById('tictactoe-challenge-banner');
+      const message = document.getElementById('tictactoe-challenge-message');
+      const link = document.getElementById('tictactoe-challenge-link');
+      const round = state.currentRound;
+      if (state.status === 'complete') {
+        message.textContent = state.seriesWinner
+          ? `${state.players[state.seriesWinner].name} won the series.`
+          : 'The Division Series ended in a draw.';
+      } else if (round.status === 'complete') {
+        message.textContent = `Round ${state.roundNumber} is complete. Continue the series when you’re ready.`;
+      } else if (round.turn === currentRoomState?.role) {
+        message.textContent = 'Your turn! Make your move.';
+      } else {
+        message.textContent = `Waiting for ${state.players[round.turn].name} to make a move.`;
+      }
+      link.href = `game.html?room=${encodeURIComponent(state.roomCode)}&match=${encodeURIComponent(state.id)}`;
+      banner.classList.remove('hidden');
+    }
+
+    function updateRoomHeader(state) {
+      document.getElementById('session-code').textContent = state.roomCode;
+      document.getElementById('header-q-num').textContent = state.status === 'waiting'
+        ? '0'
+        : String(state.status === 'completed' ? state.cardLimit : state.roundIndex + 1);
+      document.getElementById('header-q-limit').textContent = String(state.cardLimit);
+      document.getElementById('q-current').textContent = String(state.roundIndex + 1);
+      document.getElementById('q-limit').textContent = String(state.cardLimit);
+    }
+
+    function showRoomState(state) {
+      if (adRewardRoomCode !== state.roomCode) {
+        resetAdRewardWatch();
+        adRewardRoomCode = state.roomCode;
+        document.getElementById('start-ad-video-btn').disabled = false;
+        document.getElementById('claim-ad-reward-btn').textContent =
+          'Finish the video to unlock 5 cards';
+        document.getElementById('claim-ad-reward-btn').className =
+          'mt-2 w-full cursor-not-allowed rounded-xl bg-gray-300 px-4 py-3 font-black text-gray-600';
+      }
+      currentRoomState = state;
+      activeRoomCode = state.roomCode;
+      const ticTacToeEntry = document.getElementById('tictactoe-room-entry');
+      ticTacToeEntry.classList.toggle('hidden', state.status !== 'paired');
+      if (state.status === 'paired') {
+        document.getElementById('tictactoe-room-entry-link').href =
+          `game.html?room=${encodeURIComponent(state.roomCode)}`;
+      }
+      if (roomNameCode !== state.roomCode) {
+        roomNameCode = state.roomCode;
+        syncRoomNameFields(`Room #${state.roomCode}`);
+      }
+      updateRoomHeader(state);
+      rememberRoom(state.roomCode);
+
+      if (state.status === 'waiting') {
+        showView('view-lobby');
+        document.getElementById('room-pairing-result').textContent =
+          `Room ${state.roomCode} is ready. Share the code with your partner to begin.`;
+        document.getElementById('display-new-code').textContent = state.roomCode;
+        document.getElementById('invite-share-container').classList.remove('hidden');
+        return;
+      }
+
+      if (state.status === 'completed') {
+        showView('view-complete');
+        document.getElementById('completion-status').textContent =
+          `This session has completed ${state.roundIndex} cards. Player 1's current tier is ` +
+          `${state.playerOneTier.replaceAll('_', ' ')}. ` +
+          (state.role === 'host'
+            ? state.resumeAvailable
+              ? 'Your Player 1 tier allows more cards. Resume when you are ready.'
+              : state.adRewardAvailable
+                ? state.adRewardCanWatch
+                  ? 'Watch the video below to unlock more cards.'
+                  : 'You’ve reached this week’s ad-reward limit. Check below to see when it resets.'
+                : 'No additional cards are available for this session.'
+            : 'Your shared answers are available in Me & U history when signed in.');
+        const resumeButton = document.getElementById('resume-session-btn');
+        resumeButton.classList.toggle(
+          'hidden',
+          state.role !== 'host' || state.playerOneTier === 'free'
+        );
+        resumeButton.disabled = !state.resumeAvailable;
+        resumeButton.textContent = state.resumeAvailable
+          ? 'Resume session for more cards'
+          : 'No more cards at your current tier';
+        document.getElementById('free-ad-option').classList.toggle(
+          'hidden',
+          !state.adRewardAvailable
+        );
+        if (state.adRewardAvailable) {
+          const bonusCards = Math.min(5, 50 - state.cardLimit);
+          const startAdButton = document.getElementById('start-ad-video-btn');
+          startAdButton.textContent =
+            `Watch the video for ${bonusCards} more card${bonusCards === 1 ? '' : 's'}`;
+          startAdButton.disabled = !state.adRewardCanWatch || Boolean(adVideoPlayer);
+          if (!adRewardCompleted) {
+            document.getElementById('claim-ad-reward-btn').textContent =
+              `Finish the video to unlock ${bonusCards} card${bonusCards === 1 ? '' : 's'}`;
+          }
+        }
+        document.getElementById('claim-ad-reward-btn').disabled = !adRewardCompleted;
+        if (state.adRewardAvailable && !state.adRewardCanWatch &&
+            state.adRewardCooldownUntil) {
+          const cooldownEnd = new Date(state.adRewardCooldownUntil);
+          document.getElementById('ad-reward-status').textContent =
+            `You’ve earned 15 added cards in this seven-day period. You can watch more ads after ` +
+            `${cooldownEnd.toLocaleString()}.`;
+        } else if (!adRewardServerStarted && !adRewardCompleted) {
+          document.getElementById('ad-reward-status').textContent =
+            `Watch the entire video here at normal speed to unlock the reward. ` +
+            `${state.adBonusCycleCards} of 15 added cards earned this seven-day period.`;
+        }
+        return;
+      }
+
+      if (state.status !== 'paired') {
+        throw new Error(`Unknown room status: ${state.status}`);
+      }
+
+      document.getElementById('room-pairing-result').textContent = '';
+      document.getElementById('invite-share-container').classList.add('hidden');
+      if (!state.isMyTurn) {
+ showView('view-waiting');
+
+document.getElementById('waiting-room-message').innerHTML = `
+  <div style="background: rgba(255, 255, 255, 0.07); border-left: 4px solid #34d399; padding: 1.25rem; border-radius: 0 12px 12px 0; margin-bottom: 1.25rem; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+    <p style="font-size: 1.15rem; line-height: 1.6; margin-bottom: 0.85rem; font-weight: 500;">
+      Welcome to <strong>Getting2KU</strong>—the app designed to help you actually get to know the person behind the profile.
+    </p>
+    <p style="font-size: 1.05rem; line-height: 1.6; margin-bottom: 0; opacity: 0.9;">
+      From lighthearted debates to deep-dive hypotheticals, Getting2KU gives you the perfect excuse to ask what you <em>really</em> want to know.
+    </p>
+  </div>
+  <div style="text-align: center; font-weight: 600; color: #34d399; font-size: 1.05rem; letter-spacing: 0.5px;">
+    ✨ One moment while your partner answers their questions... ✨
+  </div>
+`;
+
+document.getElementById('waiting-room-code').textContent = `Room ${state.roomCode}`;
+return;
+  }
+
+      showView(state.revealedAnswers && !revisingRoomAnswer ? 'view-reveal' : 'view-gameplay');
+      renderRoomCard(state).catch(error => {
+        console.error('Unable to render the shared room card:', error);
+        getCardStatusElement().textContent = error.message;
+      });
+    }
+
+    async function renderRoomCard(state) {
+      await G2KUCardEngine.ready;
+      const card = G2KUCardEngine.getCard(
+        state.roundIndex,
+        state.tier,
+        [],
+        `${state.roomCode}:${state.roundIndex}`
+      );
+      if (currentRoomState !== state) return;
+      const checkpoint = (state.roundIndex + 1) % 5 === 0 ||
+        state.roundIndex + 1 === state.cardLimit;
+      const options = document.getElementById('answers-grid');
+      const nextButton = document.getElementById('next-card-btn');
+      const advanceButton = document.getElementById('advanceSharedRoom');
+      const revealed = Boolean(state.revealedAnswers) && !revisingRoomAnswer;
+      const status = document.getElementById(revealed ? 'revealRoomStatus' : 'sharedRoomStatus');
+      const backButton = document.getElementById('back-question-btn');
+      const backRevealButton = document.getElementById('back-reveal-btn');
+
+      document.getElementById(revealed ? 'sharedRoomRevealTitle' : 'sharedRoomTitle').textContent =
+        `${state.playerName || state.role} & ${state.partnerName || 'Partner'}`;
+      document.getElementById(revealed ? 'sharedRoomRevealProgress' : 'sharedRoomProgress').textContent =
+        `Room ${state.roomCode} · Card ${state.roundIndex + 1} of ${state.cardLimit} · ${state.tier.replaceAll('_', ' ')} pass`;
+      document.getElementById('q-current').textContent = String(state.roundIndex + 1);
+      document.getElementById('card-category-badge').textContent = card.category;
+      document.getElementById('question-title').textContent = card.prompt;
+      document.getElementById('revealed-question').textContent = card.prompt;
+      options.replaceChildren();
+      nextButton.classList.add('hidden');
+      advanceButton.classList.add('hidden');
+      nextButton.disabled = false;
+      advanceButton.disabled = false;
+      backButton.classList.add('hidden');
+      backRevealButton.classList.add('hidden');
+
+      if (revealed) {
+        document.getElementById('picked-choice-text').textContent =
+          `Both players answered card ${state.roundIndex + 1}.`;
+        const answers = document.getElementById('sharedRoomAnswers');
+        answers.replaceChildren();
+        for (const answer of state.revealedAnswers) {
+          const item = document.createElement('p');
+          item.className = 'rounded-xl bg-gray-100 p-3 font-bold text-gray-800';
+          item.textContent = `${answer.role === 'host' ? 'Player 1' : 'Player 2'}: ${answer.answer}`;
+          answers.appendChild(item);
         }
 
-        function showCompletedRoom(state) {
-            document.getElementById('sharedRoomTitle').textContent = 'Room complete';
-            document.getElementById('sharedRoomProgress').textContent =
-                `Room ${state.roomCode} · ${state.cardLimit} cards completed`;
-            document.getElementById('sharedRoomStatus').textContent = state.isSignedIn
-                ? 'Your shared answers and your private vibe checks are saved to your account history.'
-                : 'The card pass is complete. Sign in to save future rooms to your account history.';
-            document.getElementById('sharedRoomPrompt').textContent = '';
-            document.getElementById('sharedRoomOptions').replaceChildren();
-            document.getElementById('sharedRoomAnswers').replaceChildren();
-            document.getElementById('privateVibeCheck').style.display = 'none';
-            document.getElementById('advanceSharedRoom').style.display = 'none';
+        advanceButton.textContent = state.roundIndex + 1 === state.cardLimit
+          ? 'Finish Room'
+          : 'Next Card';
+        if (state.isMyTurn && state.hasSubmitted) {
+          advanceButton.classList.remove('hidden');
+          advanceButton.disabled = checkpoint && state.role === 'guest' &&
+            state.hostIsSignedIn && !state.hostHasVibeCheck;
+          if (state.roundIndex > 0) backRevealButton.classList.remove('hidden');
         }
+        status.textContent = state.isMyTurn
+          ? 'Your answer and your partner’s answer are shared.'
+          : 'Your partner answered. The shared answers are shown below.';
+        return;
+      }
 
-        async function submitRoomAnswer(card, answer) {
-            try {
-                await G2KURoomClient.request('submit_answer', {
-                    answer,
-                    questionId: card.id,
-                    prompt: card.prompt
-                });
-            } catch (error) {
-                document.getElementById('sharedRoomStatus').textContent = error.message;
-            }
+
+      document.getElementById('picked-choice-text').textContent = '';
+      if (state.isMyTurn && (!state.hasSubmitted || revisingRoomAnswer)) {
+        status.textContent = 'Choose an answer. It stays private until both players have answered.';
+        if (state.roundIndex > 0) backButton.classList.remove('hidden');
+        const colors = ['bg-kh-red', 'bg-kh-blue', 'bg-kh-yellow', 'bg-kh-green'];
+        card.options.forEach((answer, index) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = `ans-btn kh-btn ${colors[index]} p-4 sm:p-5 rounded-2xl text-left font-black text-white`;
+          button.textContent = answer;
+          button.addEventListener('click', () => submitRoomAnswer(card, answer));
+          options.appendChild(button);
+        });
+      } else if (state.isMyTurn && state.hasSubmitted) {
+        status.textContent = 'Your answer is saved. Continue when you are ready.';
+        nextButton.textContent = state.roundIndex + 1 === state.cardLimit
+          ? 'Finish Your Turn'
+          : 'Next Card';
+        nextButton.classList.remove('hidden');
+        if (state.roundIndex > 0) backButton.classList.remove('hidden');
+      }
+    }
+
+async function submitRoomAnswer(card, answer) {
+  // 1. Save the answer locally into our session buffer instead of spamming the server
+  localSessionAnswers.push({
+    roundIndex: currentRoomState.roundIndex,
+    questionId: card.id,
+    prompt: card.prompt,
+    category: card.category,
+    answer: answer
+  });
+
+  // 2. Check if we just completed the 5-question block (or hit the card limit)
+  const isBlockComplete = (currentRoomState.roundIndex + 1) % 5 === 0 || 
+                          (currentRoomState.roundIndex + 1) === currentRoomState.cardLimit;
+
+  if (isBlockComplete) {
+    // Switch to the Session Summary & Adjustment view
+    showSessionSummaryReview();
+  } else {
+    // For questions 1-4, advance locally to the next card seamlessly
+    currentRoomState.roundIndex++;
+    showRoomState(currentRoomState);
+  }
+}
+
+// Dedicated function to render the 5-question review and adjustment screen
+function showSessionSummaryReview() {
+  reviewingSession = true;
+  showView('view-reveal');
+  document.getElementById('sharedRoomRevealTitle').textContent = "Session Complete - Review & Adjust";
+  document.getElementById('sharedRoomRevealProgress').textContent = `Reviewing your 5-question block`;
+  document.getElementById('revealed-question').textContent = "Here are your answers for this session. Tap any to adjust before locking in.";
+  
+  const answersContainer = document.getElementById('sharedRoomAnswers');
+  answersContainer.replaceChildren();
+
+  // List all accumulated local answers with an edit option
+  localSessionAnswers.forEach((item, idx) => {
+    const row = document.createElement('div');
+    row.className = 'rounded-xl bg-gray-100 p-3 font-bold text-gray-800 flex justify-between items-center';
+    const answerText = document.createElement('span');
+    answerText.textContent = `Q${idx + 1}: ${item.answer}`;
+    row.appendChild(answerText);
+    
+    const editBtn = document.createElement('button');
+    editBtn.type = 'button';
+    editBtn.className = 'text-xs bg-kh-blue text-white px-2 py-1 rounded-lg';
+    editBtn.textContent = 'Change';
+    editBtn.addEventListener('click', () => {
+      // Jump back to that specific question index to let them change it
+      currentRoomState.roundIndex = item.roundIndex;
+      localSessionAnswers = localSessionAnswers.filter(a => a.roundIndex < item.roundIndex);
+      showRoomState(currentRoomState);
+    });
+    
+    row.appendChild(editBtn);
+    answersContainer.appendChild(row);
+  });
+
+  // Show the final lock-in button
+  const advanceButton = document.getElementById('advanceSharedRoom');
+  advanceButton.classList.remove('hidden');
+  advanceButton.textContent = 'Lock In Session Answers';
+  advanceButton.disabled = false;
+}
+
+// Final submission function that pushes all 5 collected answers to the server in a batch
+async function lockInAndSubmitSessionBatch() {
+  const advanceButton = document.getElementById('advanceSharedRoom');
+  advanceButton.disabled = true;
+  try {
+    await G2KURoomClient.request('submit_answer', {
+      answers: localSessionAnswers
+    });
+    await G2KURoomClient.request('advance_round');
+    localSessionAnswers = [];
+    reviewingSession = false;
+  } catch (error) {
+    advanceButton.disabled = false;
+    getCardStatusElement().textContent = error.message;
+  }
+}
+    async function goBackToPreviousCard() {
+      revisingRoomAnswer = true;
+      const buttons = [
+        document.getElementById('back-question-btn'),
+        document.getElementById('back-reveal-btn')
+      ];
+      for (const button of buttons) button.disabled = true;
+      try {
+        await G2KURoomClient.request('back_question');
+      } catch (error) {
+        revisingRoomAnswer = false;
+        getCardStatusElement().textContent = error.message;
+        for (const button of buttons) button.disabled = false;
+      }
+    }
+
+    async function advanceRoom() {
+      if (reviewingSession) {
+        await lockInAndSubmitSessionBatch();
+        return;
+      }
+      const buttons = [
+        document.getElementById('next-card-btn'),
+        document.getElementById('advanceSharedRoom')
+      ];
+      for (const button of buttons) button.disabled = true;
+      try {
+        await G2KURoomClient.request('advance_round');
+      } catch (error) {
+        getCardStatusElement().textContent = error.message;
+        for (const button of buttons) button.disabled = false;
+      }
+    }
+
+    function getCardStatusElement() {
+      return document.getElementById(
+        !document.getElementById('view-reveal').classList.contains('hidden')
+          ? 'revealRoomStatus'
+          : 'sharedRoomStatus'
+      );
+    }
+
+    async function connectToRoomService() {
+      await G2KURoomClient.connect(handleRoomMessage, status => {
+        if (status === 'disconnected') {
+          setRoomStatus('Disconnected from the room service. Refresh to reconnect.');
+        } else if (status === 'connected') {
+          setRoomStatus('');
         }
+      });
+    }
 
-        async function savePrivateVibeCheck(choice) {
-            try {
-                await G2KURoomClient.request('save_vibe_check', {
-                    roundIndex: currentRoomState.roundIndex,
-                    choice
-                });
-            } catch (error) {
-                document.getElementById('sharedRoomStatus').textContent = error.message;
-            }
+    async function createRoom() {
+      setRoomStatus('Creating a room…');
+      const requestedRoomName = document.getElementById('new-room-name').value;
+      try {
+        await connectToRoomService();
+        const result = await G2KURoomClient.request('create_room', {
+          playerId: G2KURoomClient.getPlayerId()
+        });
+        showRoomState(result.state);
+        await savePrivateRoomName(result.state.roomCode, requestedRoomName);
+        setRoomStatus('Room created. Share the code with your partner.');
+      } catch (error) {
+        setRoomStatus(error.message);
+      }
+    }
+
+    async function joinRoom() {
+      const code = document.getElementById('space-code-input').value.trim().toUpperCase();
+      if (!/^[A-HJ-NP-Z2-9]{8}$/.test(code)) {
+        setRoomStatus('Enter a valid 8-character room code.');
+        return;
+      }
+      activeRoomCode = code;
+      setRoomStatus(`Joining room ${code}…`);
+      try {
+        await connectToRoomService();
+        let result;
+        try {
+          result = await G2KURoomClient.request('join_room', {
+            roomCode: code,
+            playerId: G2KURoomClient.getPlayerId()
+          });
+        } catch (error) {
+          if (!error.message.startsWith('This device created the room.') &&
+              !error.message.startsWith('Join from a different account') &&
+              !error.message.startsWith('This room already has two players.')) throw error;
+          result = await G2KURoomClient.request('resume_room', {
+            roomCode: code,
+            playerId: G2KURoomClient.getPlayerId()
+          });
         }
+        showRoomState(result.state);
+        await loadPrivateRoomName(result.state.roomCode);
+        document.getElementById('space-code-input').value = '';
+        setRoomStatus('');
+      } catch (error) {
+        setRoomStatus(error.message);
+      }
+    }
 
-        async function advanceSharedRoom() {
-            const button = document.getElementById('advanceSharedRoom');
-            button.disabled = true;
-            try {
-                await G2KURoomClient.request('advance_round');
-            } catch (error) {
-                document.getElementById('sharedRoomStatus').textContent = error.message;
-                button.disabled = false;
-            }
+    async function resumeRoom(code) {
+      activeRoomCode = code;
+      setRoomStatus(`Reconnecting to room ${code}…`);
+      try {
+        await connectToRoomService();
+        const result = await G2KURoomClient.request('resume_room', {
+          roomCode: code,
+          playerId: G2KURoomClient.getPlayerId()
+        });
+        showRoomState(result.state);
+        await loadPrivateRoomName(result.state.roomCode);
+        setRoomStatus('');
+      } catch (error) {
+        setRoomStatus(error.message);
+      }
+    }
+
+    async function copyInviteLink() {
+      const inviteUrl = getInviteUrl();
+      try {
+        await navigator.clipboard.writeText(inviteUrl.href);
+        setRoomStatus('Invite link copied.');
+      } catch (error) {
+        console.error('Unable to copy the room invite link:', error);
+        setRoomStatus('Could not copy the invite link. Share the room code instead.');
+      }
+    }
+
+    function getInviteUrl() {
+      const inviteUrl = new URL(window.location.href);
+      inviteUrl.searchParams.set('room', activeRoomCode);
+      return inviteUrl;
+    }
+
+    async function shareInviteLink() {
+      if (!activeRoomCode) {
+        setRoomStatus('Create a room before sharing an invite link.');
+        return;
+      }
+
+      const inviteUrl = getInviteUrl();
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: 'Join my Getting2KU room',
+            text: `Join my Getting2KU room with code ${activeRoomCode}.`,
+            url: inviteUrl.href
+          });
+        } catch (error) {
+          if (error.name === 'AbortError') return;
+          console.error('Unable to share the room invite:', error);
+          setRoomStatus('Could not open the share menu. You can copy the invite link instead.');
         }
+        return;
+      }
 
-        async function renderAccountStatus() {
-            const element = document.getElementById('room-account-status');
-            try {
-                const response = await fetch('/api/auth/session', { credentials: 'same-origin' });
-                if (response.status === 401) {
-                    element.textContent = 'Not signed in. Room pairing still works with this browser’s anonymous player ID.';
-                    return;
-                }
-                if (!response.ok) throw new Error(`Account check failed (HTTP ${response.status}).`);
-                const result = await response.json();
-                element.textContent = `Signed in as ${result.user.name} · ${result.user.tier.replaceAll('_', ' ')} access.`;
-            } catch (error) {
-                console.error('Unable to check room account status:', error);
-                element.textContent = `Unable to check account status: ${error.message}`;
-            }
+      try {
+        await navigator.clipboard.writeText(inviteUrl.href);
+        setRoomStatus('Invite link copied. Paste it into a message to share it.');
+      } catch (error) {
+        console.error('Unable to share or copy the room invite:', error);
+        setRoomStatus('Sharing is not supported here. Copy the room code and send it to your partner.');
+      }
+    }
+
+    async function renderAccountStatus() {
+      const element = document.getElementById('room-account-status');
+      try {
+        const response = await fetch('/api/auth/session', { credentials: 'same-origin' });
+        if (response.status === 401) {
+          element.textContent = 'Not signed in. You can still join a room in this browser.';
+          return;
         }
+        if (!response.ok) throw new Error(`Account check failed (HTTP ${response.status}).`);
+        const result = await response.json();
+        element.textContent =
+          `Signed in as ${result.user.name} · ${result.user.tier.replaceAll('_', ' ')} access.`;
+      } catch (error) {
+        console.error('Unable to check room account status:', error);
+        element.textContent = `Unable to check account status: ${error.message}`;
+      }
+    }
 
-        async function connectToRoomService() {
-            await G2KURoomClient.connect(handleRoomMessage, status => {
-                if (status === 'disconnected') {
-                    setStatus('Disconnected from the room service. Refresh to reconnect.');
-                }
-            });
-        }
+    document.getElementById('start-btn').addEventListener('click', createRoom);
+    document.getElementById('join-room-btn').addEventListener('click', joinRoom);
+    document.getElementById('space-code-input').addEventListener('keydown', event => {
+      if (event.key === 'Enter') joinRoom();
+    });
+    document.getElementById('copy-invite-btn').addEventListener('click', copyInviteLink);
+    document.getElementById('share-invite-btn').addEventListener('click', shareInviteLink);
+    document.getElementById('advanceSharedRoom').addEventListener('click', advanceRoom);
+    document.getElementById('next-card-btn').addEventListener('click', advanceRoom);
+    document.getElementById('back-question-btn').addEventListener('click', goBackToPreviousCard);
+    document.getElementById('back-reveal-btn').addEventListener('click', goBackToPreviousCard);
+    document.getElementById('resume-session-btn').addEventListener('click', () => {
+      if (activeRoomCode) resumeRoom(activeRoomCode);
+    });
+    document.getElementById('start-ad-video-btn').addEventListener('click', startAdVideo);
+    document.getElementById('claim-ad-reward-btn').addEventListener('click', async event => {
+      const button = event.currentTarget;
+      const status = document.getElementById('ad-reward-status');
+      if (!activeRoomCode || button.disabled || !adRewardCompleted) return;
+      button.disabled = true;
+      status.textContent = 'Adding your bonus cards…';
+      try {
+        const result = await G2KURoomClient.request('claim_ad_reward');
+        status.textContent = `${result.bonusCards} bonus cards are ready.`;
+        adRewardCompleted = false;
+        resetAdRewardWatch();
+        document.getElementById('start-ad-video-btn').disabled = false;
+      } catch (error) {
+        console.error('Unable to claim the ad reward:', error);
+        status.textContent = `Could not add bonus cards: ${error.message}`;
+        button.disabled = false;
+      }
+    });
 
-        async function handleJoinWithCode() {
-            const input = document.getElementById('space-code-input');
-            const code = input.value.trim().toUpperCase();
-            if (!code) {
-                setStatus('Enter the room code your partner shared with you.');
-                return;
-            }
-
-            activeSpaceCode = code;
-            setStatus('Joining the room…');
-            try {
-                await connectToRoomService();
-                let result;
-                try {
-                    result = await G2KURoomClient.request('join_room', {
-                        roomCode: code,
-                        playerId: G2KURoomClient.getPlayerId()
-                    });
-                } catch (error) {
-                    if (!error.message.startsWith('This device created the room.') &&
-                        !error.message.startsWith('Join from a different account') &&
-                        !error.message.startsWith('This room already has two players.')) throw error;
-                    result = await G2KURoomClient.request('resume_room', {
-                        roomCode: code,
-                        playerId: G2KURoomClient.getPlayerId()
-                    });
-                }
-                rememberSpace(code);
-                showRoomState(result.state);
-            } catch (error) {
-                setStatus(error.message);
-            }
-        }
-
-        async function handleGenerateAndInvite() {
-            setStatus('Creating a room…');
-            try {
-                await connectToRoomService();
-                const result = await G2KURoomClient.request('create_room', {
-                    playerId: G2KURoomClient.getPlayerId()
-                });
-                activeSpaceCode = result.state.roomCode;
-                rememberSpace(activeSpaceCode);
-
-                document.getElementById('display-new-code').innerText = activeSpaceCode;
-                document.getElementById('invite-share-container').style.display = 'block';
-                showRoomState(result.state);
-                setStatus('Room created. Share the code or invite link with your partner.');
-            } catch (error) {
-                setStatus(error.message);
-            }
-        }
-
-        async function copyInviteLink() {
-            const inviteUrl = new URL(window.location.href);
-            inviteUrl.searchParams.set('room', activeSpaceCode);
-            try {
-                await navigator.clipboard.writeText(inviteUrl.href);
-                setStatus('Invite link copied. Send it to your partner.');
-            } catch (error) {
-                setStatus(`Copy failed. Share this room code instead: ${activeSpaceCode}`);
-            }
-        }
-
-        async function resumeSpace(code) {
-            activeSpaceCode = code;
-            setStatus(`Reconnecting to room ${code}…`);
-            try {
-                await connectToRoomService();
-                const result = await G2KURoomClient.request('resume_room', {
-                    roomCode: code,
-                    playerId: G2KURoomClient.getPlayerId()
-                });
-                showRoomState(result.state);
-            } catch (error) {
-                setStatus(error.message);
-            }
-        }
-
-        function renderActiveSpaces() {
-            const list = document.getElementById('active-spaces-list');
-            const history = JSON.parse(localStorage.getItem('g2ku_active_spaces') || '[]');
-            list.replaceChildren();
-
-            history.forEach(code => {
-                if (typeof code !== 'string' || !/^[A-HJ-NP-Z2-9]{8}$/.test(code)) return;
-                const item = document.createElement('li');
-                item.className = 'space-item';
-
-                const label = document.createElement('span');
-                label.className = 'space-code-text';
-                label.textContent = code;
-
-                const button = document.createElement('button');
-                button.className = 'btn-resume';
-                button.textContent = 'Resume';
-                button.addEventListener('click', () => resumeSpace(code));
-
-                item.append(label, button);
-                list.appendChild(item);
-            });
-        }
-
-        renderActiveSpaces();
-        renderAccountStatus();
-        const inviteCode = new URLSearchParams(window.location.search).get('room');
-        if (inviteCode) {
-            document.getElementById('space-code-input').value = inviteCode.toUpperCase();
-            handleJoinWithCode();
-        }
-    </script>
-    <script src="site-layout.js"></script>
+    renderRecentRooms();
+    renderAccountStatus();
+    const inviteCode = new URLSearchParams(window.location.search).get('room');
+    if (inviteCode) {
+      document.getElementById('space-code-input').value = inviteCode.toUpperCase();
+      joinRoom();
+    }
+  </script>
+  <script src="site-layout.js"></script>
 </body>
 </html>

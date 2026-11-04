@@ -203,10 +203,12 @@ app.post('/api/auth/demo-login', async (request, response) => {
     return;
   }
 
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
     const passwordHash = await hashSecret(crypto.randomBytes(32).toString('base64url'));
     const recoveryHash = await hashSecret(crypto.randomBytes(32).toString('base64url'));
-    const { rows } = await pool.query(
+    const { rows } = await client.query(
       `INSERT INTO auth_users
          (name, email, date_of_birth, password_hash, security_question,
           security_answer_hash, tier, is_demo)
@@ -218,15 +220,28 @@ app.post('/api/auth/demo-login', async (request, response) => {
       [account.name, account.email, passwordHash, recoveryHash, account.tier]
     );
     if (!rows[0]) {
+      await client.query('COMMIT');
       response.status(409).json({ error: 'The demo account email is already used by a non-demo account.' });
       return;
     }
 
-    const sessionToken = await createAuthSession(pool, rows[0].id);
+    await client.query(`
+      DELETE FROM account_room_history history
+      USING auth_users users
+      WHERE history.user_id = users.id AND users.is_demo = TRUE
+    `);
+    const sessionToken = await createAuthSession(client, rows[0].id);
+    await client.query('COMMIT');
+
     setAuthSessionCookie(response, sessionToken);
     response.json({ user: rows[0] });
   } catch (error) {
+    await client.query('ROLLBACK').catch(rollbackError => {
+      console.error('Unable to rollback demo account reset:', rollbackError);
+    });
     handleAuthRouteError(response, error);
+  } finally {
+    client.release();
   }
 });
 
@@ -351,15 +366,125 @@ app.get('/api/auth/history', async (request, response) => {
     }
 
     const { rows } = await pool.query(
-      `SELECT room_code, round_index, question_id, prompt, own_answer,
-              partner_answer, private_vibe_check, created_at
-         FROM account_room_history
-        WHERE user_id = $1
-        ORDER BY created_at DESC, room_code, round_index DESC
+      `SELECT history.room_code, history.round_index, history.question_id,
+              history.prompt, history.category, history.own_answer,
+              history.partner_answer, history.player_name, history.partner_name,
+              history.partner_id,
+              COALESCE(names.room_name, 'Room #' || history.room_code) AS room_name,
+              history.session_created_at, history.session_completed,
+              history.answered_at, history.created_at
+         FROM account_room_history history
+         LEFT JOIN account_room_names names
+           ON names.user_id = history.user_id
+          AND names.room_code = history.room_code
+        WHERE history.user_id = $1
+        ORDER BY COALESCE(history.session_created_at, history.created_at) DESC,
+                 history.room_code, history.round_index DESC
         LIMIT 200`,
       [user.id]
     );
     response.json({ history: rows });
+  } catch (error) {
+    handleAuthRouteError(response, error);
+  }
+});
+
+app.get('/api/auth/rooms/:roomCode/name', async (request, response) => {
+  try {
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      clearAuthSessionCookie(response);
+      response.status(401).json({ error: 'Sign in to view your private room name.' });
+      return;
+    }
+
+    const roomCode = request.params.roomCode.toUpperCase();
+    if (!ROOM_CODE_PATTERN.test(roomCode)) {
+      response.status(400).json({ error: 'Enter a valid room code.' });
+      return;
+    }
+
+    const { rows } = await pool.query(
+      `SELECT COALESCE(names.room_name, 'Room #' || rooms.code) AS room_name
+         FROM rooms
+         LEFT JOIN account_room_names names
+           ON names.room_code = rooms.code AND names.user_id = $2
+        WHERE rooms.code = $1
+          AND (rooms.host_user_id = $2 OR rooms.guest_user_id = $2)`,
+      [roomCode, user.id]
+    );
+    if (rows.length === 0) {
+      response.status(404).json({ error: 'This room is not linked to your account.' });
+      return;
+    }
+    response.json({ roomName: rows[0].room_name });
+  } catch (error) {
+    handleAuthRouteError(response, error);
+  }
+});
+
+app.patch('/api/auth/rooms/:roomCode/name', async (request, response) => {
+  try {
+    const user = await getAuthenticatedUser(request);
+    if (!user) {
+      clearAuthSessionCookie(response);
+      response.status(401).json({ error: 'Sign in to save your private room name.' });
+      return;
+    }
+
+    const roomCode = request.params.roomCode.toUpperCase();
+    const requestedName = request.body?.roomName;
+    if (!ROOM_CODE_PATTERN.test(roomCode) ||
+        typeof requestedName !== 'string' || requestedName.trim().length > 100) {
+      response.status(400).json({ error: 'Enter a room name of 100 characters or fewer.' });
+      return;
+    }
+
+    const roomName = requestedName.trim() || `Room #${roomCode}`;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query(
+        `SELECT 1 FROM rooms
+          WHERE code = $1 AND (host_user_id = $2 OR guest_user_id = $2)
+          FOR UPDATE`,
+        [roomCode, user.id]
+      );
+      let isAuthorized = rows.length > 0;
+      if (!isAuthorized) {
+        const { rows: historyRows } = await client.query(
+          `SELECT 1 FROM account_room_history
+            WHERE room_code = $1 AND user_id = $2
+            LIMIT 1`,
+          [roomCode, user.id]
+        );
+        isAuthorized = historyRows.length > 0;
+      }
+      if (!isAuthorized) {
+        await client.query('ROLLBACK');
+        response.status(404).json({ error: 'This room is not linked to your account history.' });
+        return;
+      }
+
+      await client.query(
+        `INSERT INTO account_room_names (user_id, room_code, room_name)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, room_code) DO UPDATE
+           SET room_name = EXCLUDED.room_name, updated_at = NOW()`,
+        [user.id, roomCode, roomName]
+      );
+      await client.query(
+        'UPDATE account_room_history SET room_name = $1 WHERE user_id = $2 AND room_code = $3',
+        [roomName, user.id, roomCode]
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+    response.json({ roomName });
   } catch (error) {
     handleAuthRouteError(response, error);
   }
@@ -493,6 +618,7 @@ async function initializeDatabase() {
         CHECK (tier IN ('free', 'tier_30_day', 'unlocked')),
       ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE
   `);
+  await pool.query('DELETE FROM auth_users WHERE is_demo = TRUE');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS auth_email_codes (
@@ -528,22 +654,72 @@ async function initializeDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS rooms (
       code TEXT PRIMARY KEY,
+      room_name TEXT NOT NULL DEFAULT '',
       host_player_id TEXT NOT NULL,
       guest_player_id TEXT,
       host_user_id BIGINT REFERENCES auth_users(id) ON DELETE SET NULL,
       guest_user_id BIGINT REFERENCES auth_users(id) ON DELETE SET NULL,
       tier TEXT NOT NULL DEFAULT 'free' CHECK (tier IN ('free', 'tier_30_day', 'unlocked')),
       round_index INTEGER NOT NULL DEFAULT 0 CHECK (round_index >= 0),
+      answering_role TEXT NOT NULL DEFAULT 'host'
+        CHECK (answering_role IN ('host', 'guest', 'completed')),
+      pass_start_index INTEGER NOT NULL DEFAULT 0 CHECK (pass_start_index >= 0),
+      ad_bonus_cards INTEGER NOT NULL DEFAULT 0 CHECK (ad_bonus_cards >= 0),
+      ad_bonus_cycle_cards INTEGER NOT NULL DEFAULT 0 CHECK (ad_bonus_cycle_cards >= 0),
+      ad_reward_cooldown_until TIMESTAMPTZ,
+      ad_reward_started_at TIMESTAMPTZ,
+      ad_reward_duration_seconds INTEGER NOT NULL DEFAULT 0 CHECK (ad_reward_duration_seconds >= 0),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 days'
     )
   `);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS room_tictactoe_matches (
+      id UUID PRIMARY KEY,
+      room_code TEXT NOT NULL REFERENCES rooms(code) ON DELETE CASCADE,
+      state JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS room_tictactoe_matches_room_created_idx
+      ON room_tictactoe_matches (room_code, created_at DESC)
+  `);
+  await pool.query(`
     ALTER TABLE rooms
+      ADD COLUMN IF NOT EXISTS room_name TEXT NOT NULL DEFAULT '',
       ADD COLUMN IF NOT EXISTS host_user_id BIGINT REFERENCES auth_users(id) ON DELETE SET NULL,
       ADD COLUMN IF NOT EXISTS guest_user_id BIGINT REFERENCES auth_users(id) ON DELETE SET NULL,
       ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'free'
-        CHECK (tier IN ('free', 'tier_30_day', 'unlocked'))
+        CHECK (tier IN ('free', 'tier_30_day', 'unlocked')),
+      ADD COLUMN IF NOT EXISTS answering_role TEXT NOT NULL DEFAULT 'host'
+        CHECK (answering_role IN ('host', 'guest', 'completed')),
+      ADD COLUMN IF NOT EXISTS pass_start_index INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS ad_bonus_cards INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS ad_bonus_cycle_cards INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS ad_reward_cooldown_until TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS ad_reward_started_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS ad_reward_duration_seconds INTEGER NOT NULL DEFAULT 0
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS account_room_names (
+      user_id BIGINT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+      room_code TEXT NOT NULL,
+      room_name TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (user_id, room_code)
+    )
+  `);
+  await pool.query(`
+    UPDATE rooms
+       SET answering_role = 'completed'
+     WHERE answering_role = 'host'
+       AND round_index >= CASE tier
+         WHEN 'tier_30_day' THEN 15
+         WHEN 'unlocked' THEN 50
+         ELSE 5
+       END
   `);
 
   await pool.query(`
@@ -554,6 +730,7 @@ async function initializeDatabase() {
       answer TEXT NOT NULL,
       question_id TEXT NOT NULL DEFAULT '',
       prompt TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL DEFAULT '',
       submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (room_code, round_index, player_id)
     )
@@ -561,7 +738,8 @@ async function initializeDatabase() {
   await pool.query(`
     ALTER TABLE room_answers
       ADD COLUMN IF NOT EXISTS question_id TEXT NOT NULL DEFAULT '',
-      ADD COLUMN IF NOT EXISTS prompt TEXT NOT NULL DEFAULT ''
+      ADD COLUMN IF NOT EXISTS prompt TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT ''
   `);
 
   await pool.query(`
@@ -571,12 +749,36 @@ async function initializeDatabase() {
       round_index INTEGER NOT NULL CHECK (round_index >= 0),
       question_id TEXT NOT NULL,
       prompt TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT '',
       own_answer TEXT NOT NULL,
       partner_answer TEXT NOT NULL,
-      private_vibe_check TEXT,
+      player_name TEXT NOT NULL DEFAULT 'Player 1',
+      partner_name TEXT NOT NULL DEFAULT 'Player 2',
+      partner_id TEXT NOT NULL DEFAULT 'PartnerIDunknown',
+      room_name TEXT NOT NULL DEFAULT '',
+      session_created_at TIMESTAMPTZ,
+      session_completed BOOLEAN NOT NULL DEFAULT FALSE,
+      answered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (user_id, room_code, round_index)
     )
+  `);
+  await pool.query(`
+    ALTER TABLE account_room_history
+      ADD COLUMN IF NOT EXISTS category TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS player_name TEXT NOT NULL DEFAULT 'Player 1',
+      ADD COLUMN IF NOT EXISTS partner_name TEXT NOT NULL DEFAULT 'Player 2',
+      ADD COLUMN IF NOT EXISTS partner_id TEXT NOT NULL DEFAULT 'PartnerIDunknown',
+      ADD COLUMN IF NOT EXISTS room_name TEXT NOT NULL DEFAULT '',
+      ADD COLUMN IF NOT EXISTS session_created_at TIMESTAMPTZ,
+      ADD COLUMN IF NOT EXISTS session_completed BOOLEAN NOT NULL DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS answered_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  `);
+
+  await pool.query(`
+    DELETE FROM account_room_history history
+    USING auth_users users
+    WHERE history.user_id = users.id AND users.is_demo = TRUE
   `);
 
   await pool.query('DELETE FROM rooms WHERE expires_at <= NOW()');
@@ -886,17 +1088,95 @@ function validatePlayerId(playerId) {
   return typeof playerId === 'string' && PLAYER_ID_PATTERN.test(playerId);
 }
 
+async function backfillRoomHistoryForUser(client, roomCode, userId) {
+  if (!userId) return;
+  const { rows: roomRows } = await client.query(
+    `SELECT rooms.host_player_id, rooms.guest_player_id,
+            rooms.host_user_id, rooms.guest_user_id,
+            rooms.created_at, host_user.name AS host_name,
+            guest_user.name AS guest_name
+       FROM rooms
+       LEFT JOIN auth_users host_user ON host_user.id = rooms.host_user_id
+       LEFT JOIN auth_users guest_user ON guest_user.id = rooms.guest_user_id
+      WHERE rooms.code = $1`,
+    [roomCode]
+  );
+  const room = roomRows[0];
+  if (!room || !room.guest_player_id) return;
+
+  const isHost = String(room.host_user_id) === String(userId);
+  const isGuest = String(room.guest_user_id) === String(userId);
+  if (!isHost && !isGuest) return;
+
+  const userPlayerId = isHost ? room.host_player_id : room.guest_player_id;
+  const partnerPlayerId = isHost ? room.guest_player_id : room.host_player_id;
+  const playerName = isHost ? room.host_name || 'Player 1' : room.guest_name || 'Player 2';
+  const partnerName = isHost ? room.guest_name || 'Player 2' : room.host_name || 'Player 1';
+  const partnerId = isHost ? room.guest_name : room.host_name;
+
+  const { rows: roundRows } = await client.query(
+    `SELECT DISTINCT round_index FROM room_answers WHERE room_code = $1`,
+    [roomCode]
+  );
+
+  for (const { round_index } of roundRows) {
+    const { rows: ansRows } = await client.query(
+      `SELECT player_id, answer, question_id, prompt, category, submitted_at
+         FROM room_answers
+        WHERE room_code = $1 AND round_index = $2`,
+      [roomCode, round_index]
+    );
+    const own = ansRows.find(a => a.player_id === userPlayerId);
+    const partner = ansRows.find(a => a.player_id === partnerPlayerId);
+    if (own && partner) {
+      await client.query(
+        `INSERT INTO account_room_history
+           (user_id, room_code, round_index, question_id, prompt, category,
+            own_answer, partner_answer, player_name, partner_name, partner_id,
+            room_name, session_created_at, answered_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         ON CONFLICT (user_id, room_code, round_index) DO UPDATE
+           SET question_id = EXCLUDED.question_id,
+               prompt = EXCLUDED.prompt,
+               category = EXCLUDED.category,
+               own_answer = EXCLUDED.own_answer,
+               partner_answer = EXCLUDED.partner_answer,
+               player_name = EXCLUDED.player_name,
+               partner_name = EXCLUDED.partner_name,
+               partner_id = EXCLUDED.partner_id,
+               room_name = EXCLUDED.room_name,
+               session_created_at = EXCLUDED.session_created_at,
+               answered_at = EXCLUDED.answered_at`,
+        [userId, roomCode, round_index, own.question_id, own.prompt, own.category,
+          own.answer, partner.answer, playerName, partnerName,
+          partnerId || 'PartnerIDunknown', `Room #${roomCode}`,
+          room.created_at, new Date(Math.max(
+            new Date(own.submitted_at).getTime(),
+            new Date(partner.submitted_at).getTime()
+          ))]
+      );
+    }
+  }
+}
+
 function getRoomCardLimit(tier) {
   if (tier === 'tier_30_day') return 15;
   if (tier === 'unlocked') return 50;
   return 5;
 }
 
+function getRoomCardLimitWithAdBonus(tier, adBonusCards = 0) {
+  return Math.min(50, getRoomCardLimit(tier) + adBonusCards);
+}
+
 async function getRoomState(code, playerId, userId) {
   const { rows } = await pool.query(
     `SELECT rooms.code, rooms.host_player_id, rooms.guest_player_id,
             rooms.host_user_id, rooms.guest_user_id, rooms.tier, rooms.round_index,
-            host_user.name AS host_name, guest_user.name AS guest_name
+            rooms.pass_start_index, rooms.answering_role, rooms.ad_bonus_cards,
+            rooms.ad_bonus_cycle_cards, rooms.ad_reward_cooldown_until,
+            host_user.name AS host_name, host_user.tier AS host_tier,
+            guest_user.name AS guest_name
        FROM rooms
        LEFT JOIN auth_users host_user ON host_user.id = rooms.host_user_id
        LEFT JOIN auth_users guest_user ON guest_user.id = rooms.guest_user_id
@@ -914,42 +1194,52 @@ async function getRoomState(code, playerId, userId) {
     throw new Error('Sign in to the account that joined this room.');
   }
 
-  const { rows: answerRows } = await pool.query(
-    `SELECT player_id, answer
+ const { rows: answerRows } = await pool.query(
+    `SELECT player_id, answer, question_id, prompt
        FROM room_answers
       WHERE room_code = $1 AND round_index = $2`,
     [code, room.round_index]
   );
   const paired = Boolean(room.guest_player_id);
-  const revealed = paired && answerRows.length === 2;
-  const completed = paired && room.round_index >= getRoomCardLimit(room.tier);
-  const { rows: vibeRows } = userId
-    ? await pool.query(
-        `SELECT 1
-           FROM account_room_history
-          WHERE user_id = $1 AND room_code = $2 AND round_index = $3
-            AND private_vibe_check IS NOT NULL`,
-        [userId, code, room.round_index]
-      )
-    : { rows: [] };
+  const revealed = paired && room.answering_role === 'guest' && answerRows.length === 2;
+  const completed = room.answering_role === 'completed';
+  const cardLimit = getRoomCardLimitWithAdBonus(room.tier, room.ad_bonus_cards);
+  const playerOneTier = room.host_tier || 'free';
+  const adRewardCooldownExpired = room.ad_reward_cooldown_until &&
+    new Date(room.ad_reward_cooldown_until).getTime() <= Date.now();
 
   return {
     roomCode: room.code,
     status: completed ? 'completed' : paired ? 'paired' : 'waiting',
     role: isHost ? 'host' : 'guest',
     tier: room.tier,
+    playerOneTier,
+    answeringRole: room.answering_role,
+    isMyTurn: room.answering_role === (isHost ? 'host' : 'guest'),
     playerName: isHost ? room.host_name : room.guest_name,
     partnerName: isHost ? room.guest_name : room.host_name,
     isSignedIn: Boolean(userId),
+    hostIsSignedIn: Boolean(room.host_user_id),
     roundIndex: room.round_index,
-    cardLimit: getRoomCardLimit(room.tier),
+    cardLimit,
+    passStartIndex: room.pass_start_index,
+    resumeAvailable: completed && isHost &&
+      getRoomCardLimit(playerOneTier) > room.round_index,
+    adRewardAvailable: completed && isHost && playerOneTier === 'free' && cardLimit < 50,
+    adRewardCanWatch: completed && isHost && playerOneTier === 'free' &&
+      cardLimit < 50 &&
+      (room.ad_bonus_cycle_cards < 15 ||
+        adRewardCooldownExpired),
+    adRewardCooldownUntil: room.ad_reward_cooldown_until,
+    adBonusCycleCards: adRewardCooldownExpired ? 0 : room.ad_bonus_cycle_cards,
     answerCount: answerRows.length,
     hasSubmitted: answerRows.some(answer => answer.player_id === playerId),
-    hasVibeCheck: vibeRows.length > 0,
     revealedAnswers: revealed
       ? answerRows.map(answer => ({
           role: answer.player_id === room.host_player_id ? 'host' : 'guest',
-          answer: answer.answer
+          answer: answer.answer,
+          questionId: answer.question_id,
+          prompt: answer.prompt
         }))
       : null
   };
@@ -971,6 +1261,388 @@ async function publishRoomState(code) {
   }
 }
 
+const TICTACTOE_TOKEN_PAIRS = [
+  ['🚩', '🟢'],
+  ['💍', '👻'],
+  ['🍕', '🥑'],
+  ['🐸', '🦋'],
+  ['🌙', '☀️']
+];
+const TICTACTOE_LINES = [
+  [0, 1, 2], [3, 4, 5], [6, 7, 8],
+  [0, 3, 6], [1, 4, 7], [2, 5, 8],
+  [0, 4, 8], [2, 4, 6]
+];
+
+async function getTicTacToeRoomPlayer(client, webSocket) {
+  const code = webSocket.roomCode;
+  const playerId = webSocket.playerId;
+  if (!code || !playerId) throw new Error('Join a room before playing Tic-Tac-Toe.');
+
+  const { rows } = await client.query(
+    `SELECT host_player_id, guest_player_id, host_user_id, guest_user_id,
+            host_user.name AS host_name, guest_user.name AS guest_name
+       FROM rooms
+       LEFT JOIN auth_users host_user ON host_user.id = rooms.host_user_id
+       LEFT JOIN auth_users guest_user ON guest_user.id = rooms.guest_user_id
+      WHERE rooms.code = $1 AND rooms.expires_at > NOW()
+      FOR UPDATE OF rooms`,
+    [code]
+  );
+  const room = rows[0];
+  if (!room) throw new Error('Room not found or expired.');
+
+  const role = room.host_player_id === playerId
+    ? 'host'
+    : room.guest_player_id === playerId
+      ? 'guest'
+      : null;
+  if (!role) throw new Error('This player is not a member of that room.');
+
+  const expectedUserId = role === 'host' ? room.host_user_id : room.guest_user_id;
+  if (expectedUserId && String(expectedUserId) !== String(webSocket.authUserId)) {
+    throw new Error('Sign in to the account that joined this room.');
+  }
+  if (!room.guest_player_id) throw new Error('Invite your partner to the room before starting Tic-Tac-Toe.');
+
+  return {
+    role,
+    roomCode: code,
+    hostPlayerId: room.host_player_id,
+    guestPlayerId: room.guest_player_id,
+    hostName: room.host_name || 'Player 1',
+    guestName: room.guest_name || 'Player 2'
+  };
+}
+
+function createTicTacToeState(room, id) {
+  const pair = TICTACTOE_TOKEN_PAIRS[crypto.randomInt(TICTACTOE_TOKEN_PAIRS.length)];
+  return {
+    id,
+    roomCode: room.roomCode,
+    players: {
+      host: { id: room.hostPlayerId, name: room.hostName, token: pair[0] },
+      guest: { id: room.guestPlayerId, name: room.guestName, token: pair[1] }
+    },
+    wins: { host: 0, guest: 0 },
+    comebackCandidates: { host: false, guest: false },
+    points: { host: 0, guest: 0 },
+    badges: { host: [], guest: [] },
+    roundNumber: 1,
+    status: 'active',
+    seriesWinner: null,
+    currentRound: {
+      board: Array(9).fill(null),
+      starter: 'host',
+      turn: 'host',
+      status: 'active',
+      winner: null,
+      clutchPlayers: [],
+      result: null
+    }
+  };
+}
+
+function getTicTacToeWinningCells(board, role) {
+  const winningCells = new Set();
+  for (const [first, second, third] of TICTACTOE_LINES) {
+    const cells = [board[first], board[second], board[third]];
+    if (cells.filter(cell => cell === role).length === 2 &&
+        cells.filter(cell => cell === null).length === 1) {
+      winningCells.add([first, second, third][cells.indexOf(null)]);
+    }
+  }
+  return winningCells;
+}
+
+function getTicTacToeWinner(board) {
+  for (const role of ['host', 'guest']) {
+    if (TICTACTOE_LINES.some(line => line.every(cell => board[cell] === role))) {
+      return role;
+    }
+  }
+  return null;
+}
+
+async function publishTicTacToeState(code, state) {
+  const sockets = roomSockets.get(code);
+  if (!sockets) return;
+  for (const webSocket of sockets) {
+    const myRole = state.players.host.id === webSocket.playerId ? 'host' : 'guest';
+    send(webSocket, { type: 'tictactoe_state', state, myRole });
+  }
+}
+
+async function publishLatestTicTacToeState(code) {
+  const { rows } = await pool.query(
+    `SELECT state FROM room_tictactoe_matches
+      WHERE room_code = $1
+      ORDER BY created_at DESC LIMIT 1`,
+    [code]
+  );
+  if (rows[0]) await publishTicTacToeState(code, rows[0].state);
+}
+
+async function getTicTacToeHistory(code, queryable = pool) {
+  const { rows } = await queryable.query(
+    `SELECT id, state, created_at, updated_at
+       FROM room_tictactoe_matches
+      WHERE room_code = $1
+      ORDER BY created_at DESC
+      LIMIT 25`,
+    [code]
+  );
+  return rows.map(match => ({
+    id: match.id,
+    status: match.state.status,
+    roundNumber: match.state.roundNumber,
+    wins: match.state.wins,
+    points: match.state.points,
+    seriesWinner: match.state.seriesWinner,
+    players: match.state.players,
+    createdAt: match.created_at,
+    updatedAt: match.updated_at
+  }));
+}
+
+async function listTicTacToeHistory(webSocket, requestId) {
+  const client = await pool.connect();
+  let room;
+  let matches;
+  try {
+    await client.query('BEGIN');
+    room = await getTicTacToeRoomPlayer(client, webSocket);
+    matches = await getTicTacToeHistory(room.roomCode, client);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  respond(webSocket, requestId, 'tictactoe_history_loaded', {
+    roomCode: room.roomCode,
+    matches
+  });
+}
+
+async function loadTicTacToe(webSocket, requestId, message) {
+  const client = await pool.connect();
+  let room;
+  let state;
+  try {
+    await client.query('BEGIN');
+    room = await getTicTacToeRoomPlayer(client, webSocket);
+    const matchId = message.matchId ?? null;
+    if (matchId !== null && (typeof matchId !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(matchId))) {
+      throw new Error('Invalid Tic-Tac-Toe series ID.');
+    }
+    const { rows } = await client.query(
+      `SELECT state FROM room_tictactoe_matches
+        WHERE room_code = $1 AND ($2::uuid IS NULL OR id = $2::uuid)
+        ORDER BY created_at DESC LIMIT 1`,
+      [room.roomCode, matchId]
+    );
+    state = rows[0]?.state || null;
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  respond(webSocket, requestId, 'tictactoe_loaded', { state, myRole: room.role });
+  if (state) await publishTicTacToeState(room.roomCode, state);
+}
+
+async function startTicTacToe(webSocket, requestId) {
+  const client = await pool.connect();
+  let room;
+  let state;
+  try {
+    await client.query('BEGIN');
+    room = await getTicTacToeRoomPlayer(client, webSocket);
+    const { rows } = await client.query(
+      `SELECT id, state FROM room_tictactoe_matches
+        WHERE room_code = $1
+        ORDER BY created_at DESC LIMIT 1 FOR UPDATE`,
+      [room.roomCode]
+    );
+    const latest = rows[0];
+    if (latest?.state.status === 'active') {
+      state = latest.state;
+    } else {
+      const id = crypto.randomUUID();
+      state = createTicTacToeState(room, id);
+      await client.query(
+        'INSERT INTO room_tictactoe_matches (id, room_code, state) VALUES ($1, $2, $3)',
+        [id, room.roomCode, state]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  respond(webSocket, requestId, 'tictactoe_started', { state, myRole: room.role });
+  await publishTicTacToeState(room.roomCode, state);
+}
+
+async function makeTicTacToeMove(webSocket, requestId, message) {
+  const cellIndex = message.cellIndex;
+  if (!Number.isInteger(cellIndex) || cellIndex < 0 || cellIndex > 8) {
+    throw new Error('Choose a valid board cell.');
+  }
+
+  const client = await pool.connect();
+  let room;
+  let state;
+  try {
+    await client.query('BEGIN');
+    room = await getTicTacToeRoomPlayer(client, webSocket);
+    const matchId = typeof message.matchId === 'string' ? message.matchId : '';
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(matchId)) {
+      throw new Error('Invalid Tic-Tac-Toe series ID.');
+    }
+    const { rows } = await client.query(
+      `SELECT state FROM room_tictactoe_matches
+        WHERE id = $1 AND room_code = $2 FOR UPDATE`,
+      [matchId, room.roomCode]
+    );
+    if (!rows[0]) throw new Error('Tic-Tac-Toe series not found.');
+    state = rows[0].state;
+    const round = state.currentRound;
+    if (state.status !== 'active' || round.status !== 'active') {
+      throw new Error('This round is over.');
+    }
+    if (round.turn !== room.role) throw new Error('It is your partner’s turn.');
+    if (round.board[cellIndex] !== null) throw new Error('That cell is already taken.');
+
+    const opponent = room.role === 'host' ? 'guest' : 'host';
+    const threatCells = getTicTacToeWinningCells(round.board, opponent);
+    round.board[cellIndex] = room.role;
+    if (threatCells.size === 1 && threatCells.has(cellIndex) &&
+        !getTicTacToeWinner(round.board) &&
+        !round.clutchPlayers.includes(room.role)) {
+      round.clutchPlayers.push(room.role);
+    }
+
+    const winner = getTicTacToeWinner(round.board);
+    if (winner) {
+      round.status = 'complete';
+      round.winner = winner;
+      if (state.wins[winner] === 0 && state.wins[opponent] === 2) {
+        state.comebackCandidates[winner] = true;
+      }
+      state.wins[winner] += 1;
+      state.points[winner] += 10;
+
+      const winningTokenCount = round.board.filter(cell => cell === winner).length;
+      if (winningTokenCount === 3 && !state.badges[winner].includes('Strategist')) {
+        state.badges[winner].push('Strategist');
+      }
+
+      if (state.wins[winner] === 3) {
+        state.status = 'complete';
+        state.seriesWinner = winner;
+        state.points[winner] += 35;
+        if (state.wins[opponent] === 0) state.points[winner] += 20;
+        if (state.comebackCandidates[winner] &&
+            !state.badges[winner].includes('Series MVP')) {
+          state.badges[winner].push('Series MVP');
+        }
+      }
+      round.result = {
+        winner,
+        message: `${state.players[winner].name} wins Round ${state.roundNumber}!`
+      };
+    } else if (round.board.every(cell => cell !== null)) {
+      round.status = 'complete';
+      round.winner = null;
+      state.points.host += 2;
+      state.points.guest += 2;
+      for (const role of round.clutchPlayers) {
+        if (!state.badges[role].includes('Clutch Block')) {
+          state.badges[role].push('Clutch Block');
+        }
+      }
+      round.result = { winner: null, message: `Round ${state.roundNumber} is a draw.` };
+    } else {
+      round.turn = opponent;
+    }
+
+    if (round.status === 'complete' && state.status === 'active' &&
+        state.roundNumber === 5) {
+      state.status = 'complete';
+      state.seriesWinner = null;
+    }
+
+    await client.query(
+      'UPDATE room_tictactoe_matches SET state = $2, updated_at = NOW() WHERE id = $1',
+      [state.id, state]
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  respond(webSocket, requestId, 'tictactoe_move', { state, myRole: room.role });
+  await publishTicTacToeState(room.roomCode, state);
+}
+
+async function advanceTicTacToeRound(webSocket, requestId, message) {
+  const client = await pool.connect();
+  let room;
+  let state;
+  try {
+    await client.query('BEGIN');
+    room = await getTicTacToeRoomPlayer(client, webSocket);
+    const matchId = typeof message.matchId === 'string' ? message.matchId : '';
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(matchId)) {
+      throw new Error('Invalid Tic-Tac-Toe series ID.');
+    }
+    const { rows } = await client.query(
+      `SELECT state FROM room_tictactoe_matches
+        WHERE id = $1 AND room_code = $2 FOR UPDATE`,
+      [matchId, room.roomCode]
+    );
+    if (!rows[0]) throw new Error('Tic-Tac-Toe series not found.');
+    state = rows[0].state;
+    if (state.status !== 'active') throw new Error('The Division Series is complete.');
+    if (state.currentRound.status === 'complete') {
+      const previousStarter = state.currentRound.starter;
+      state.roundNumber += 1;
+      const starter = previousStarter === 'host' ? 'guest' : 'host';
+      state.currentRound = {
+        board: Array(9).fill(null),
+        starter,
+        turn: starter,
+        status: 'active',
+        winner: null,
+        clutchPlayers: [],
+        result: null
+      };
+      await client.query(
+        'UPDATE room_tictactoe_matches SET state = $2, updated_at = NOW() WHERE id = $1',
+        [state.id, state]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  respond(webSocket, requestId, 'tictactoe_round_advanced', { state, myRole: room.role });
+  await publishTicTacToeState(room.roomCode, state);
+}
+
 async function createRoom(webSocket, requestId, message) {
   if (!validatePlayerId(message.playerId)) throw new Error('Invalid player ID.');
 
@@ -981,9 +1653,10 @@ async function createRoom(webSocket, requestId, message) {
     code = generateRoomCode();
     try {
       await pool.query(
-        `INSERT INTO rooms (code, host_player_id, host_user_id, tier)
-         VALUES ($1, $2, $3, $4)`,
-        [code, message.playerId, webSocket.authUserId, webSocket.authUserTier]
+        `INSERT INTO rooms (code, room_name, host_player_id, host_user_id, tier)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [code, `Room #${code}`, message.playerId,
+          webSocket.authUserId, webSocket.authUserTier]
       );
       break;
     } catch (error) {
@@ -1032,6 +1705,7 @@ async function joinRoom(webSocket, requestId, message) {
         [code, message.playerId, webSocket.authUserId]
       );
     }
+    await backfillRoomHistoryForUser(client, code, webSocket.authUserId);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -1044,6 +1718,7 @@ async function joinRoom(webSocket, requestId, message) {
   const state = await getRoomState(code, message.playerId, webSocket.authUserId);
   respond(webSocket, requestId, 'room_joined', { state });
   await publishRoomState(code);
+  await publishLatestTicTacToeState(code);
 }
 
 async function resumeRoom(webSocket, requestId, message) {
@@ -1052,38 +1727,197 @@ async function resumeRoom(webSocket, requestId, message) {
   if (!validatePlayerId(message.playerId)) throw new Error('Invalid player ID.');
 
   let playerId = message.playerId;
-  if (webSocket.authUserId) {
-    await pool.query(
-      `UPDATE rooms
-          SET host_user_id = $3
-        WHERE code = $1 AND host_player_id = $2 AND host_user_id IS NULL
-          AND (guest_user_id IS NULL OR guest_user_id <> $3)`,
-      [code, message.playerId, webSocket.authUserId]
-    );
-    await pool.query(
-      `UPDATE rooms
-          SET guest_user_id = $3
-        WHERE code = $1 AND guest_player_id = $2 AND guest_user_id IS NULL
-          AND (host_user_id IS NULL OR host_user_id <> $3)`,
-      [code, message.playerId, webSocket.authUserId]
-    );
-    const { rows } = await pool.query(
-      `SELECT host_player_id, guest_player_id, host_user_id, guest_user_id
-         FROM rooms
-        WHERE code = $1 AND expires_at > NOW()
-          AND (host_user_id = $2 OR guest_user_id = $2)`,
-      [code, webSocket.authUserId]
-    );
-    if (rows[0]) {
-      playerId = String(rows[0].host_user_id) === String(webSocket.authUserId)
-        ? rows[0].host_player_id
-        : rows[0].guest_player_id;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    if (webSocket.authUserId) {
+      await client.query(
+        `UPDATE rooms
+            SET host_user_id = $3
+          WHERE code = $1 AND host_player_id = $2 AND host_user_id IS NULL
+            AND (guest_user_id IS NULL OR guest_user_id <> $3)`,
+        [code, message.playerId, webSocket.authUserId]
+      );
+      await client.query(
+        `UPDATE rooms
+            SET guest_user_id = $3
+          WHERE code = $1 AND guest_player_id = $2 AND guest_user_id IS NULL
+            AND (host_user_id IS NULL OR host_user_id <> $3)`,
+        [code, message.playerId, webSocket.authUserId]
+      );
+      const { rows: roomRows } = await client.query(
+        `SELECT rooms.host_player_id, rooms.guest_player_id,
+                rooms.host_user_id, rooms.guest_user_id, rooms.round_index,
+                rooms.tier, rooms.answering_role, rooms.pass_start_index,
+                rooms.ad_bonus_cards,
+                host_user.tier AS host_tier
+           FROM rooms
+           LEFT JOIN auth_users host_user ON host_user.id = rooms.host_user_id
+          WHERE rooms.code = $1 AND rooms.expires_at > NOW()
+            AND (rooms.host_user_id = $2 OR rooms.guest_user_id = $2)
+          FOR UPDATE OF rooms`,
+        [code, webSocket.authUserId]
+      );
+      const room = roomRows[0];
+      if (room) {
+        const isHost = String(room.host_user_id) === String(webSocket.authUserId);
+        playerId = isHost ? room.host_player_id : room.guest_player_id;
+        const playerOneCardLimit = getRoomCardLimit(room.host_tier || 'free');
+        if (isHost && room.answering_role === 'completed' &&
+            playerOneCardLimit > room.round_index) {
+          await client.query(
+            `UPDATE rooms
+                SET tier = $2, pass_start_index = round_index, answering_role = 'host'
+              WHERE code = $1`,
+            [code, room.host_tier]
+          );
+          await client.query(
+            'UPDATE account_room_history SET session_completed = FALSE WHERE room_code = $1',
+            [code]
+          );
+        }
+      }
     }
+    await backfillRoomHistoryForUser(client, code, webSocket.authUserId);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
 
   const state = await getRoomState(code, playerId, webSocket.authUserId);
   attachSocket(webSocket, code, playerId);
   respond(webSocket, requestId, 'room_resumed', { state });
+  await publishRoomState(code);
+  await publishLatestTicTacToeState(code);
+}
+
+async function startAdReward(webSocket, requestId, message) {
+  const code = webSocket.roomCode;
+  const playerId = webSocket.playerId;
+  const durationSeconds = Number(message.durationSeconds);
+  if (!code || !playerId) throw new Error('Join a room before starting an ad reward.');
+  if (!Number.isInteger(durationSeconds) || durationSeconds < 1 || durationSeconds > 1800) {
+    throw new Error('The ad video duration is invalid.');
+  }
+
+  const { rows } = await pool.query(
+    `UPDATE rooms
+        SET ad_bonus_cycle_cards =
+              CASE WHEN ad_reward_cooldown_until <= NOW() THEN 0
+                   ELSE ad_bonus_cycle_cards END,
+            ad_reward_cooldown_until =
+              CASE WHEN ad_reward_cooldown_until <= NOW() THEN NULL
+                   ELSE ad_reward_cooldown_until END,
+            ad_reward_started_at = NOW(),
+            ad_reward_duration_seconds = $3
+      WHERE code = $1 AND host_player_id = $2 AND answering_role = 'completed'
+        AND expires_at > NOW() AND ad_bonus_cards < 45
+        AND (ad_bonus_cycle_cards < 15 OR ad_reward_cooldown_until <= NOW())
+        AND (ad_reward_cooldown_until IS NULL OR ad_reward_cooldown_until <= NOW())
+        AND (host_user_id IS NULL OR host_user_id = $4)
+        AND COALESCE(
+          (SELECT tier FROM auth_users WHERE id = rooms.host_user_id), 'free'
+        ) = 'free'
+      RETURNING ad_reward_duration_seconds`,
+    [code, playerId, durationSeconds, webSocket.authUserId || null]
+  );
+  if (!rows[0]) {
+    throw new Error('This room is not eligible to start an ad reward.');
+  }
+
+  respond(webSocket, requestId, 'ad_reward_started', {
+    durationSeconds: rows[0].ad_reward_duration_seconds
+  });
+}
+
+async function claimAdReward(webSocket, requestId) {
+  const code = webSocket.roomCode;
+  const playerId = webSocket.playerId;
+  if (!code || !playerId) throw new Error('Join a room before claiming an ad reward.');
+
+  let bonusCards = 0;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT rooms.host_player_id, rooms.host_user_id, rooms.tier,
+              rooms.round_index, rooms.answering_role, rooms.ad_bonus_cards,
+              rooms.ad_bonus_cycle_cards, rooms.ad_reward_cooldown_until,
+              rooms.ad_reward_started_at, rooms.ad_reward_duration_seconds,
+              (rooms.ad_reward_started_at <= NOW() -
+                rooms.ad_reward_duration_seconds * INTERVAL '1 second') AS ad_reward_elapsed,
+              host_user.tier AS host_tier
+         FROM rooms
+         LEFT JOIN auth_users host_user ON host_user.id = rooms.host_user_id
+        WHERE rooms.code = $1 AND rooms.expires_at > NOW()
+        FOR UPDATE OF rooms`,
+      [code]
+    );
+    const room = rows[0];
+    if (!room) throw new Error('Room not found or expired.');
+    if (room.host_player_id !== playerId) {
+      throw new Error('Only Player 1 can claim an ad reward.');
+    }
+    if (room.host_user_id && String(room.host_user_id) !== String(webSocket.authUserId)) {
+      throw new Error('Sign in to the account that created this room.');
+    }
+    if (room.answering_role !== 'completed') {
+      throw new Error('Complete the current card pass before claiming another ad reward.');
+    }
+    if (!room.ad_reward_started_at || !room.ad_reward_duration_seconds) {
+      throw new Error('Watch the full video before claiming this reward.');
+    }
+    if (!room.ad_reward_elapsed) {
+      throw new Error('Watch the full video before claiming this reward.');
+    }
+    if ((room.host_tier || 'free') !== 'free') {
+      throw new Error('Ad rewards are only available for free-tier Player 1 accounts.');
+    }
+    if (room.ad_reward_cooldown_until &&
+        new Date(room.ad_reward_cooldown_until).getTime() > Date.now()) {
+      throw new Error('The ad reward cooldown is still active.');
+    }
+    if (room.ad_bonus_cycle_cards >= 15) {
+      throw new Error('The 15-card ad reward limit has been reached. Wait seven days before watching more ads.');
+    }
+
+    const currentLimit = getRoomCardLimitWithAdBonus(room.tier, room.ad_bonus_cards);
+    if (currentLimit >= 50) {
+      throw new Error('This room has reached its 50-card limit.');
+    }
+
+    bonusCards = Math.min(5, 15 - room.ad_bonus_cycle_cards, 50 - currentLimit);
+    await client.query(
+      `UPDATE rooms
+          SET ad_bonus_cards = ad_bonus_cards + $2,
+              ad_bonus_cycle_cards = ad_bonus_cycle_cards + $2,
+              ad_reward_cooldown_until =
+                CASE WHEN ad_bonus_cycle_cards + $2 >= 15
+                     THEN NOW() + INTERVAL '7 days'
+                     ELSE ad_reward_cooldown_until END,
+              pass_start_index = round_index,
+              answering_role = 'host',
+              ad_reward_started_at = NULL,
+              ad_reward_duration_seconds = 0
+        WHERE code = $1`,
+      [code, bonusCards]
+    );
+    await client.query(
+      'UPDATE account_room_history SET session_completed = FALSE WHERE room_code = $1',
+      [code]
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  respond(webSocket, requestId, 'ad_reward_claimed', { bonusCards });
   await publishRoomState(code);
 }
 
@@ -1091,15 +1925,22 @@ async function submitAnswer(webSocket, requestId, message) {
   const code = webSocket.roomCode;
   const playerId = webSocket.playerId;
   if (!code || !playerId) throw new Error('Join a room before submitting an answer.');
-  if (typeof message.answer !== 'string' || !message.answer.trim() ||
-      message.answer.length > MAX_ANSWER_LENGTH) {
-    throw new Error(`Answer must contain 1 to ${MAX_ANSWER_LENGTH} characters.`);
-  }
-  if (typeof message.questionId !== 'string' || !message.questionId.trim() ||
-      message.questionId.length > 200 ||
-      typeof message.prompt !== 'string' || !message.prompt.trim() ||
-      message.prompt.length > 2000) {
-    throw new Error('The current question is invalid. Refresh the room and try again.');
+
+  const answersList = Array.isArray(message.answers) ? message.answers : [message];
+
+  for (const item of answersList) {
+    if (typeof item.answer !== 'string' || !item.answer.trim() ||
+        item.answer.length > MAX_ANSWER_LENGTH) {
+      throw new Error(`Answer must contain 1 to ${MAX_ANSWER_LENGTH} characters.`);
+    }
+    if (typeof item.questionId !== 'string' || !item.questionId.trim() ||
+        item.questionId.length > 200 ||
+        typeof item.prompt !== 'string' || !item.prompt.trim() ||
+        item.prompt.length > 2000 ||
+        (item.category !== undefined &&
+          (typeof item.category !== 'string' || item.category.length > 100))) {
+      throw new Error('The current question is invalid. Refresh the room and try again.');
+    }
   }
 
   const client = await pool.connect();
@@ -1107,7 +1948,7 @@ async function submitAnswer(webSocket, requestId, message) {
     await client.query('BEGIN');
     const { rows: rooms } = await client.query(
       `SELECT host_player_id, guest_player_id, host_user_id, guest_user_id,
-              round_index, tier
+              round_index, tier, answering_role
          FROM rooms
         WHERE code = $1 AND expires_at > NOW()
         FOR UPDATE`,
@@ -1120,66 +1961,38 @@ async function submitAnswer(webSocket, requestId, message) {
     const isHost = room.host_player_id === playerId;
     const isGuest = room.guest_player_id === playerId;
     if (!isHost && !isGuest) throw new Error('This player is not a member of that room.');
-    if (room.round_index >= getRoomCardLimit(room.tier)) {
-      throw new Error('This room has completed its card pass.');
+    const playerRole = isHost ? 'host' : 'guest';
+    if (room.answering_role !== playerRole) {
+      throw new Error(playerRole === 'guest'
+        ? 'Wait for Player 1 to finish all questions before answering.'
+        : 'Player 1 has finished. Wait for Player 2 to answer.');
     }
+
     const expectedUserId = isHost ? room.host_user_id : room.guest_user_id;
     if (expectedUserId && String(expectedUserId) !== String(webSocket.authUserId)) {
       throw new Error('Sign in to the account that joined this room.');
     }
 
-    const { rows: previousAnswers } = await client.query(
-      `SELECT question_id, prompt FROM room_answers
-        WHERE room_code = $1 AND round_index = $2`,
-      [code, room.round_index]
-    );
-    if (previousAnswers.some(answer =>
-      answer.question_id !== message.questionId || answer.prompt !== message.prompt
-    )) {
-      throw new Error('Players received different cards. Refresh the room before answering.');
+    for (const item of answersList) {
+      const targetRoundIndex = typeof item.roundIndex === 'number' ? item.roundIndex : room.round_index;
+
+      await client.query(
+        `INSERT INTO room_answers
+           (room_code, round_index, player_id, answer, question_id, prompt, category)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (room_code, round_index, player_id) DO UPDATE
+           SET answer = EXCLUDED.answer,
+               question_id = EXCLUDED.question_id,
+               prompt = EXCLUDED.prompt,
+               category = EXCLUDED.category,
+               submitted_at = NOW()`,
+        [code, targetRoundIndex, playerId, item.answer.trim(),
+          item.questionId, item.prompt, item.category?.trim() || 'Uncategorized']
+      );
     }
 
-    const { rows: inserted } = await client.query(
-      `INSERT INTO room_answers
-         (room_code, round_index, player_id, answer, question_id, prompt)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT DO NOTHING
-       RETURNING player_id`,
-      [code, room.round_index, playerId, message.answer.trim(),
-        message.questionId, message.prompt]
-    );
-    if (inserted.length === 0) {
-      throw new Error('You already answered this card.');
-    }
-
-    const { rows: answerRows } = await client.query(
-      `SELECT player_id, answer, question_id, prompt
-         FROM room_answers
-        WHERE room_code = $1 AND round_index = $2`,
-      [code, room.round_index]
-    );
-    if (answerRows.length === 2) {
-      const hostAnswer = answerRows.find(answer => answer.player_id === room.host_player_id);
-      const guestAnswer = answerRows.find(answer => answer.player_id === room.guest_player_id);
-      if (!hostAnswer || !guestAnswer) throw new Error('Room answers are incomplete.');
-
-      for (const [userId, ownAnswer, partnerAnswer] of [
-        [room.host_user_id, hostAnswer, guestAnswer],
-        [room.guest_user_id, guestAnswer, hostAnswer]
-      ]) {
-        if (!userId) continue;
-        await client.query(
-          `INSERT INTO account_room_history
-             (user_id, room_code, round_index, question_id, prompt,
-              own_answer, partner_answer)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (user_id, room_code, round_index) DO NOTHING`,
-          [userId, code, room.round_index, ownAnswer.question_id,
-            ownAnswer.prompt, ownAnswer.answer, partnerAnswer.answer]
-        );
-      }
-    }
-
+    await backfillRoomHistoryForUser(client, code, room.host_user_id);
+    await backfillRoomHistoryForUser(client, code, room.guest_user_id);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -1192,41 +2005,6 @@ async function submitAnswer(webSocket, requestId, message) {
   await publishRoomState(code);
 }
 
-async function saveVibeCheck(webSocket, requestId, message) {
-  const code = webSocket.roomCode;
-  const playerId = webSocket.playerId;
-  const userId = webSocket.authUserId;
-  const choices = new Set(['Marry them ❤️', 'Ghost them 👻', 'Like & Subscribe 🔔']);
-  if (!code || !playerId) throw new Error('Join a room before saving a vibe check.');
-  if (!userId) throw new Error('Sign in to save a private vibe check to your history.');
-  if (!Number.isInteger(message.roundIndex) || !choices.has(message.choice)) {
-    throw new Error('Choose a valid private vibe check.');
-  }
-
-  const { rows } = await pool.query(
-    `UPDATE account_room_history history
-        SET private_vibe_check = $1
-       FROM rooms
-      WHERE rooms.code = $2
-        AND rooms.expires_at > NOW()
-        AND rooms.guest_player_id IS NOT NULL
-        AND history.user_id = $3
-        AND history.room_code = rooms.code
-        AND history.round_index = $4
-        AND history.round_index = rooms.round_index
-        AND ((rooms.host_player_id = $5 AND rooms.host_user_id = $3)
-          OR (rooms.guest_player_id = $5 AND rooms.guest_user_id = $3))
-      RETURNING history.room_code`,
-    [message.choice, code, userId, message.roundIndex, playerId]
-  );
-  if (rows.length === 0) {
-    throw new Error('This card has no saved answer for your account.');
-  }
-
-  respond(webSocket, requestId, 'vibe_check_saved');
-  await publishRoomState(code);
-}
-
 async function advanceRound(webSocket, requestId) {
   const code = webSocket.roomCode;
   if (!code || !webSocket.playerId) throw new Error('Join a room before advancing.');
@@ -1235,26 +2013,98 @@ async function advanceRound(webSocket, requestId) {
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      'SELECT host_player_id, guest_player_id, round_index, tier FROM rooms WHERE code = $1 AND expires_at > NOW() FOR UPDATE',
+      `SELECT host_player_id, guest_player_id, host_user_id, round_index, tier,
+              pass_start_index, answering_role, ad_bonus_cards
+         FROM rooms WHERE code = $1 AND expires_at > NOW() FOR UPDATE`,
       [code]
     );
     const room = rows[0];
     if (!room) throw new Error('Room not found or expired.');
-    if (room.host_player_id !== webSocket.playerId) throw new Error('Only the host can start the next card.');
     if (!room.guest_player_id) throw new Error('Wait for the other player to join.');
+    
+    const isHost = room.host_player_id === webSocket.playerId;
+    const isGuest = room.guest_player_id === webSocket.playerId;
+    if (!isHost && !isGuest) throw new Error('This player is not a member of that room.');
+    
+    const playerRole = isHost ? 'host' : 'guest';
+    if (room.answering_role !== playerRole) {
+      throw new Error(playerRole === 'guest'
+        ? 'Wait for Player 1 to finish all questions before answering.'
+        : 'Player 1 has finished. Wait for Player 2 to answer.');
+    }
 
-    const { rows: answerRows } = await client.query(
-      'SELECT COUNT(*)::INTEGER AS count FROM room_answers WHERE room_code = $1 AND round_index = $2',
-      [code, room.round_index]
-    );
-    if (answerRows[0].count !== 2) throw new Error('Both players must answer before continuing.');
-    if (room.round_index >= getRoomCardLimit(room.tier)) {
+    const cardLimit = getRoomCardLimitWithAdBonus(room.tier, room.ad_bonus_cards);
+    if (room.round_index >= cardLimit) {
       throw new Error('This room has completed its card pass.');
     }
 
-    await client.query('DELETE FROM room_answers WHERE room_code = $1', [code]);
+    const nextRoundIndex = Math.min(room.round_index + 5, cardLimit);
+
+    if (nextRoundIndex < cardLimit) {
+      await client.query(
+        'UPDATE rooms SET round_index = $1 WHERE code = $2',
+        [nextRoundIndex, code]
+      );
+    } else if (playerRole === 'host') {
+      await client.query(
+        `UPDATE rooms
+            SET round_index = $2, answering_role = 'guest'
+          WHERE code = $1`,
+        [code, room.pass_start_index]
+      );
+    } else {
+      await client.query(
+        `UPDATE rooms
+            SET round_index = $1, answering_role = 'completed'
+          WHERE code = $2`,
+        [cardLimit, code]
+      );
+      await client.query(
+        'UPDATE account_room_history SET session_completed = TRUE WHERE room_code = $1',
+        [code]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  respond(webSocket, requestId, 'round_advanced');
+  await publishRoomState(code);
+}
+
+async function goBackQuestion(webSocket, requestId) {
+  const code = webSocket.roomCode;
+  const playerId = webSocket.playerId;
+  if (!code || !playerId) throw new Error('Join a room before going back.');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT host_player_id, guest_player_id, round_index, answering_role
+         FROM rooms
+        WHERE code = $1 AND expires_at > NOW()
+        FOR UPDATE`,
+      [code]
+    );
+    const room = rows[0];
+    if (!room) throw new Error('Room not found or expired.');
+    const isHost = room.host_player_id === playerId;
+    const isGuest = room.guest_player_id === playerId;
+    if (!isHost && !isGuest) throw new Error('This player is not a member of that room.');
+    const playerRole = isHost ? 'host' : 'guest';
+    if (room.answering_role !== playerRole) {
+      throw new Error('It is not your turn to answer questions.');
+    }
+    if (room.round_index <= 0) throw new Error('You are already on the first question.');
+
     await client.query(
-      'UPDATE rooms SET round_index = round_index + 1 WHERE code = $1',
+      'UPDATE rooms SET round_index = round_index - 1 WHERE code = $1',
       [code]
     );
     await client.query('COMMIT');
@@ -1265,7 +2115,7 @@ async function advanceRound(webSocket, requestId) {
     client.release();
   }
 
-  respond(webSocket, requestId, 'round_advanced');
+  respond(webSocket, requestId, 'question_backed');
   await publishRoomState(code);
 }
 
@@ -1290,14 +2140,35 @@ async function handleMessage(webSocket, rawMessage) {
       case 'resume_room':
         await resumeRoom(webSocket, requestId, message);
         break;
+      case 'claim_ad_reward':
+        await claimAdReward(webSocket, requestId);
+        break;
+      case 'start_ad_reward':
+        await startAdReward(webSocket, requestId, message);
+        break;
       case 'submit_answer':
         await submitAnswer(webSocket, requestId, message);
         break;
-      case 'save_vibe_check':
-        await saveVibeCheck(webSocket, requestId, message);
-        break;
-      case 'advance_round':
+            case 'advance_round':
         await advanceRound(webSocket, requestId);
+        break;
+      case 'back_question':
+        await goBackQuestion(webSocket, requestId);
+        break;
+      case 'load_tictactoe':
+        await loadTicTacToe(webSocket, requestId, message);
+        break;
+      case 'list_tictactoe_history':
+        await listTicTacToeHistory(webSocket, requestId);
+        break;
+      case 'start_tictactoe':
+        await startTicTacToe(webSocket, requestId);
+        break;
+      case 'tictactoe_move':
+        await makeTicTacToeMove(webSocket, requestId, message);
+        break;
+      case 'advance_tictactoe_round':
+        await advanceTicTacToeRound(webSocket, requestId, message);
         break;
       default:
         throw new Error('Unknown room action.');

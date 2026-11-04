@@ -7,11 +7,16 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <main class="arena-container">
+    <main class="arena-container history-page">
         <section class="room-setup-box">
             <div class="brand-badge">Your G2KU History</div>
             <h1 class="room-title">Me &amp; U</h1>
-            <p class="room-subtitle">Saved shared answers and your private vibe checks. Your vibe checks are visible only to you.</p>
+            <p class="room-subtitle">Saved shared answers, your private room names, and private vibe checks. Room names and vibe checks are visible only to you.</p>
+            <aside class="history-help" aria-label="Finding a missing session">
+                <strong>Can’t find a session?</strong>
+                <p>It may still be in progress. Go to Rooms and choose <strong>Resume</strong> next to the session to finish it. When you’re done, come back here—your session should then appear in Me &amp; U.</p>
+                <a href="rooms.html" class="history-help-link">Go to Rooms</a>
+            </aside>
             <p id="historyStatus" class="room-subtitle" role="status" aria-live="polite">Loading saved history…</p>
             <div id="savedRoomHistory" class="spaces-list"></div>
             <div class="generate-section">
@@ -22,6 +27,7 @@
         </section>
     </main>
 
+    <script src="g2ku-questions.js"></script>
     <script src="history.js"></script>
     <script>
         const historyStatus = document.getElementById('historyStatus');
